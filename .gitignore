@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+venv-gpx/
+
+# GPX files (except test fixture)
+*.gpx
+!test.gpx
+
+# Generated outputs
+output/
+*.png
+
+# Local tooling
+.serena/
+
+# OS / Editors
+.DS_Store
+.idea/
+.vscode/

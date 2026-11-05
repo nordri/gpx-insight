@@ -1,0 +1,6 @@
+gpxpy
+numpy
+pandas
+matplotlib
+Pillow
+scipy

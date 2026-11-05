@@ -1,0 +1,23 @@
+{
+	"distance": "Distance",
+	"ascent": "Ascent",
+	"descent": "Descent",
+	"time": "Time",
+	"avg_speed": "Avg speed",
+	"start": "Start",
+	"end": "End",
+	"elevation_profile": "Elevation profile",
+	"times_and_speeds": "Times & speeds",
+	"slope_ratios": "Slope ratios",
+	"uphill_ratio": "Uphill ratio",
+	"downhill_ratio": "Downhill ratio",
+	"ascent_per_km": "Ascent+/km",
+	"descent_per_km": "Descent-/km",
+	"uphill_analysis": "Uphill analysis",
+	"flat_sections": "Flat sections",
+	"downhill_analysis": "Downhill analysis",
+	"flat_of_route": "of route",
+	"flat_hint": "Grades < 1%",
+	"footer": "Technical route analysis",
+	"gps_points": "GPS points"
+}
