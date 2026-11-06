@@ -136,6 +136,92 @@ def _draw_slope_rows(d, x, y, rows, accent):
         txt(d,x+295,yy,f"{float(r.get('route_pct',0)):.1f}%",19,TEXT)
 
 
+
+ANALYSIS_BG = "#14251B"
+ANALYSIS_CREAM = "#E6EBD9"
+ANALYSIS_MUTED = "#CFD8CC"
+ANALYSIS_DIVIDER = "#34443A"
+ANALYSIS_UP = "#A3E635"
+ANALYSIS_DOWN = "#F87150"
+
+
+def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
+                             direction="up", lang="es"):
+    """Render one four-row grade analysis card at 2x, without altering metrics."""
+    from io import BytesIO
+    import cairosvg
+    S = 2
+    w, h = int(round(width)), int(round(height))
+    if w <= 0 or h <= 0:
+        return
+    layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(layer)
+    def sc(v): return int(round(v*S))
+    def f(sz, weight="regular"): return _time_font(sc(sz), weight)
+    def write(px, py, value, size=15, color="#FFFFFF", weight="regular", anchor="lt"):
+        hd.text((sc(px), sc(py)), str(value), font=f(size, weight),
+                fill=color, anchor=anchor)
+
+    hd.rounded_rectangle((0, 0, sc(w)-1, sc(h)-1), radius=sc(22), fill=ANALYSIS_BG)
+    is_up = direction == "up"
+    accent = ANALYSIS_UP if is_up else ANALYSIS_DOWN
+    title_text = ("Análisis subidas" if is_up else "Análisis bajadas") if lang.startswith("es") else ("Climb analysis" if is_up else "Descent analysis")
+    # Official Lucide trending-up / trending-down paths; no handmade arrows.
+    path = ('<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>' if is_up
+            else '<path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/>')
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+           f'width="24" height="24"><g fill="none" stroke="{ANALYSIS_CREAM}" '
+           f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{path}</g></svg>')
+    icon_size = sc(27)
+    raw = cairosvg.svg2png(bytestring=svg.encode("utf-8"),
+                           output_width=icon_size*2, output_height=icon_size*2)
+    icon = Image.open(BytesIO(raw)).convert("RGBA").resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+    layer.alpha_composite(icon, (sc(18), sc(17)))
+    title_size = 21
+    # Badge remains within the card even for long localized headings.
+    badge_value = "N/D" if distance_km is None else f"{float(distance_km):.2f} km"
+    badge_size = 15
+    badge_width = max(84, hd.textlength(badge_value, font=f(badge_size, "bold"))/S+24)
+    badge_left = w - 18 - badge_width
+    while title_size > 15 and hd.textlength(title_text, font=f(title_size,"bold"))/S > badge_left-59:
+        title_size -= 1
+    write(56, 20, title_text, title_size, weight="bold")
+    badge_bg = "#2E4B2B" if is_up else "#54352D"
+    badge_fg = accent
+    hd.rounded_rectangle((sc(badge_left),sc(17),sc(w-18),sc(47)),
+                         radius=sc(15), fill=badge_bg)
+    write((badge_left+w-18)/2, 32, badge_value, badge_size, badge_fg, "bold", "mm")
+
+    # Columns: label left; both numeric values right-aligned.
+    # Compact, centered table: bring numeric columns closer to the grade ranges.
+    pad = max(20, w * .10)
+    dist_right = w * .60
+    pct_right = w * .84
+    write(pad, 76, "PENDIENTE" if lang.startswith("es") else "GRADE", 12, ANALYSIS_MUTED, "semibold")
+    write(dist_right, 76, "DISTANCIA" if lang.startswith("es") else "DISTANCE", 12, ANALYSIS_MUTED, "semibold", "rt")
+    write(pct_right, 76, "% RUTA" if lang.startswith("es") else "% ROUTE", 12, ANALYSIS_MUTED, "semibold", "rt")
+    hd.line((sc(pad),sc(100),sc(w-pad),sc(100)), fill=ANALYSIS_DIVIDER, width=sc(.5))
+    # Each row has the same baseline spacing and an individual bin accent.
+    palette_up = ("#F4D03F", "#D4D65B", "#9BCF67", "#6CA87D")
+    palette_down = ("#74AEB1", "#B39E86", "#DE8C6A", "#FA6D4B")
+    palette = palette_up if is_up else palette_down
+    row_list = list(rows or [])[:4]
+    for i, row in enumerate(row_list):
+        yy = 122 + i*31
+        dot_color = row.get("dot_color") or palette[i]
+        hd.ellipse((sc(pad),sc(yy+6),sc(pad+9),sc(yy+15)), fill=dot_color)
+        write(pad+19, yy, row.get("label", ""), 16)
+        distance = row.get("distance_km")
+        percentage = row.get("route_pct")
+        dist_label = "N/D" if distance is None else f"{float(distance):.2f} km"
+        pct_label = "N/D" if percentage is None else f"{float(percentage):.1f}%"
+        write(dist_right, yy, dist_label, 16, anchor="rt")
+        write(pct_right, yy, pct_label, 16, anchor="rt")
+    if not row_list:
+        write(w/2, 177, "Sin datos de pendiente" if lang.startswith("es") else "No grade data", 15, ANALYSIS_MUTED, anchor="mm")
+    final = layer.resize((w, h), Image.Resampling.LANCZOS)
+    d._image.paste(final, (round(x),round(y)), final)
+
 def _distribution(d, x, y, width, metrics):
     ups = list(metrics.get("uphill_table") or [])
     downs = list(metrics.get("downhill_table") or [])
@@ -600,15 +686,13 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     d=ImageDraw.Draw(img)
     draw_slope_distribution_card(d, M, y, INNER, 150, metrics, lang)
     y=1492
-    gradient_card(img,(M,y,M+half,y+260),"#204334","#153128")
-    gradient_card(img,(M+half+16,y,W-M,y+260),"#24413A","#183029")
     d=ImageDraw.Draw(img)
-    title(d,M+24,y+18,_t(labels,"uphill_analysis"))
-    title(d,M+half+40,y+18,_t(labels,"downhill_analysis"))
-    _draw_slope_rows(d,M+24,y+74,metrics["uphill_table"],GREEN)
-    _draw_slope_rows(d,M+half+40,y+74,metrics["downhill_table"],ORANGE)
-    txt(d,M+half-22,y+25,f"{metrics['uphill_distance_km']:.2f} km",20,GREEN,True,anchor="ra")
-    txt(d,W-M-22,y+25,f"{metrics['downhill_distance_km']:.2f} km",20,ORANGE,True,anchor="ra")
+    draw_grade_analysis_card(d, M, y, half, 260,
+                             metrics.get("uphill_table"), metrics.get("uphill_distance_km"),
+                             "up", lang)
+    draw_grade_analysis_card(d, M+half+16, y, half, 260,
+                             metrics.get("downhill_table"), metrics.get("downhill_distance_km"),
+                             "down", lang)
     # Compact final data, preserving extreme grades and endpoints
     y=1770
     line(d,[(M,y),(W-M,y)])
