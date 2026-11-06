@@ -24,7 +24,7 @@ GREEN = "#B6D49A"
 ORANGE = "#E8A17F"
 BLUE = "#99C8CE"
 NEUTRAL = "#81958D"
-W, H = WIDTH, HEIGHT
+W, H = WIDTH, max(HEIGHT, 2140)  # Footer cards need their own vertical space.
 M = 46
 INNER = W - 2 * M
 
@@ -648,6 +648,61 @@ def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
         d.text((round(cx), y + 240), label, font=_time_font(size, "semibold"),
                fill=color, anchor="mt")
 
+def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
+    """Footer left: four grade statistics, drawn at 2x with no font stretching."""
+    from io import BytesIO
+    import cairosvg
+
+    scale = 2
+    sw, sh = round(width * scale), round(height * scale)
+    card = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    cd = ImageDraw.Draw(card)
+    cd.rounded_rectangle((0, 0, sw - 1, sh - 1), radius=22 * scale, fill="#14251B")
+    def f(size, bold=False):
+        return _time_font(size * scale, "bold" if bold else "regular")
+    def center(text, cx, cy, size, color, bold=False):
+        cd.text((round(cx * scale), round(cy * scale)), text, font=f(size, bold),
+                fill=color, anchor="mm")
+    cream, muted, lime, coral = "#E6EBD9", "#CFD8CC", "#A3E635", "#FA6D4B"
+    icon_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path d="m2 20 7-11 4 6 3-4 6 9" fill="none" stroke="{cream}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
+    png = cairosvg.svg2png(bytestring=icon_svg.encode("utf-8"), output_width=64, output_height=64)
+    icon = Image.open(BytesIO(png)).convert("RGBA")
+    card.alpha_composite(icon, (19 * scale, 15 * scale))
+    heading = "Pendientes extremas" if lang.startswith("es") else "Extreme grades"
+    cd.text((58 * scale, 20 * scale), heading, font=f(19, True), fill="#FFFFFF")
+    top = 69
+    bottom = height - 15
+    mid_y = (top + bottom) / 2
+    mid_x = width / 2
+    divider = (255, 255, 255, 30)
+    cd.line((round(mid_x * scale), round(top * scale), round(mid_x * scale), round(bottom * scale)), fill=divider, width=scale)
+    cd.line((round(18 * scale), round(mid_y * scale), round((width - 18) * scale), round(mid_y * scale)), fill=divider, width=scale)
+    values = [
+        ("PEND. MÁX. SUBIDA", metrics.get("max_up_grade_pct"), lime, False),
+        ("PEND. MÁX. BAJADA", metrics.get("max_down_grade_pct"), coral, False),
+        ("PEND. MEDIA SUBIDA", metrics.get("avg_up_grade_pct"), lime, False),
+        ("PEND. MEDIA BAJADA", metrics.get("avg_down_grade_pct"), coral, True),
+    ]
+    centers = [(width * .25, (top + mid_y) / 2), (width * .75, (top + mid_y) / 2),
+               (width * .25, (mid_y + bottom) / 2), (width * .75, (mid_y + bottom) / 2)]
+    for (label, value, color, negative), (cx, cy) in zip(values, centers):
+        if value is None:
+            value_text = "N/D"
+        else:
+            magnitude = abs(float(value))
+            value_text = ("-" if negative else "") + f"{magnitude:.1f}%"
+        label_size = 11
+        while label_size > 8 and cd.textlength(label, font=f(label_size, True)) > (width / 2 - 15) * scale:
+            label_size -= 1
+        center(label, cx, cy - 15, label_size, muted, True)
+        value_size = 29
+        while value_size > 19 and cd.textlength(value_text, font=f(value_size, True)) > (width / 2 - 16) * scale:
+            value_size -= 1
+        center(value_text, cx, cy + 14, value_size, color, True)
+    card = card.resize((round(width), round(height)), Image.Resampling.LANCZOS)
+    d._image.paste(card, (round(x), round(y)), card)
+
+
 def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     labels=_load_i18n(lang)
     img=Image.new("RGB",(W,H),BG)
@@ -745,17 +800,30 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     draw_grade_analysis_card(d, M+side_w+gap+center_w+gap, y, side_w, 258,
                              metrics.get("downhill_table"), metrics.get("downhill_distance_km"),
                              "down", lang)
-    # Compact final data, preserving extreme grades and endpoints
-    y=1770
-    line(d,[(M,y),(W-M,y)])
-    txt(d,M,y+15,"PENDIENTES" if lang.startswith("es") else "GRADES",17,MUTED,True)
-    txt(d,M,y+47,f"↑ {_grade(metrics['max_up_grade_pct'])}",27,GREEN,True)
-    txt(d,M+180,y+47,f"↓ {_grade(metrics['max_down_grade_pct'])}",27,ORANGE,True)
-    txt(d,M+430,y+15,"ALTITUD" if lang.startswith("es") else "ALTITUDE",17,MUTED,True)
-    txt(d,M+430,y+47,f"{_fmt_m(metrics['elevation_start_m'])} → {_fmt_m(metrics['elevation_end_m'])}",27,TEXT,True)
+    # Footer cards sit below the three-column grade analysis, without overlap.
+    # Keep the analytical values sourced from metrics; never recompute them here.
+    y = 1770
+    footer_gap = 16
+    footer_left_w = (INNER - footer_gap) // 2
+    footer_right_x = M + footer_left_w + footer_gap
+    footer_right_w = INNER - footer_left_w - footer_gap
+    d = ImageDraw.Draw(img)
+    draw_extreme_grades_card(d, M, y, footer_left_w, 240, metrics, lang)
+
+    # Preserve the previously displayed start/end altitude information in the
+    # right-hand footer area until its dedicated card is redesigned.
+    d.rounded_rectangle((footer_right_x, y, footer_right_x + footer_right_w,
+                         y + 240), radius=22, fill="#14251B")
+    txt(d, footer_right_x + 24, y + 24,
+        "ALTITUD" if lang.startswith("es") else "ALTITUDE", 22, TEXT, True)
+    txt(d, footer_right_x + 24, y + 91,
+        f"{_fmt_m(metrics['elevation_start_m'])} → {_fmt_m(metrics['elevation_end_m'])}",
+        27, TEXT, True)
     footer_landscape(img)
-    d=ImageDraw.Draw(img)
-    txt(d,M,1854,f"{_t(labels,'footer')}  ·  {metrics['point_count']} {_t(labels,'gps_points')}",19,MUTED)
+    d = ImageDraw.Draw(img)
+    txt(d, M, H - 66,
+        f"{_t(labels, 'footer')}  ·  {metrics['point_count']} {_t(labels, 'gps_points')}",
+        19, MUTED)
     out=Path(output_path)
     out.parent.mkdir(parents=True,exist_ok=True)
     img.save(out)
