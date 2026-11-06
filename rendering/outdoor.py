@@ -93,6 +93,29 @@ def _tiny_icon(d, x, y, kind, color=GREEN, scale=1.0):
     d._image.paste(icon,(round(x),round(y)),icon)
 
 
+def _elevation_stat_box(d, x, y, label, value, accent, direction):
+    """Draw a compact elevation badge without altering any route metrics."""
+    width, height = 174, 66
+    bg = "#284A35" if direction == "up" else "#4B302B"
+    border = "#5D865A" if direction == "up" else "#895445"
+    d.rounded_rectangle((x, y, x + width, y + height), radius=13,
+                        fill=bg, outline=border, width=2)
+    # Distinct, clean arrow; draw at native resolution (no font glyph dependency).
+    arrow_x, arrow_y = x + 17, y + 21
+    if direction == "up":
+        d.line([(arrow_x, arrow_y + 11), (arrow_x + 14, arrow_y - 3)],
+               fill=accent, width=4, joint="curve")
+        d.line([(arrow_x + 5, arrow_y - 3), (arrow_x + 14, arrow_y - 3),
+                (arrow_x + 14, arrow_y + 6)], fill=accent, width=4, joint="curve")
+    else:
+        d.line([(arrow_x, arrow_y - 3), (arrow_x + 14, arrow_y + 11)],
+               fill=accent, width=4, joint="curve")
+        d.line([(arrow_x + 5, arrow_y + 11), (arrow_x + 14, arrow_y + 11),
+                (arrow_x + 14, arrow_y + 2)], fill=accent, width=4, joint="curve")
+    txt(d, x + 43, y + 9, label.upper(), 14, accent, True)
+    txt(d, x + 43, y + 32, value, 23, TEXT, True)
+
+
 def _row_dividers(d, x, y, w, n):
     for i in range(1, n):
         xx = x + w * i / n
@@ -249,9 +272,17 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     d=ImageDraw.Draw(img)
     _tiny_icon(d,M+24,619,"mountain",GREEN,.95)
     title(d,M+66,617,_t(labels,"elevation_profile"))
-    txt(d,W-M-27,628,
-        f"+{_fmt_m(metrics['elevation_gain_m'])}   /   -{_fmt_m(metrics['elevation_loss_m'])}",
-        21,GREEN,True,anchor="ra")
+    # Elevation summary badges: same upper-right area, above the chart.
+    badge_y = 609
+    badge_gap = 12
+    badge_width = 174
+    right = W - M - 24
+    _elevation_stat_box(d, right - 2 * badge_width - badge_gap, badge_y,
+                        _t(labels, "ascent"),
+                        "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up")
+    _elevation_stat_box(d, right - badge_width, badge_y,
+                        _t(labels, "descent"),
+                        "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down")
     with Image.open(chart_path) as chart_src:
         chart=chart_src.convert("RGBA")
         chart.thumbnail((INNER-55,315),Image.Resampling.LANCZOS)
