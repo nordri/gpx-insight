@@ -227,6 +227,119 @@ def slope_distribution(d,x,y,width,metrics):
         cursor+=sw
 
 
+# Tiempos y velocidades: one visual system, independent of analytics.
+TIME_ICON_COLOR = "#E6EBD9"
+TIME_LABEL_COLOR = "#CFD8CC"
+TIME_VALUE_COLOR = "#FFFFFF"
+TIME_DIVIDER_COLOR = "#3B5045"  # ~12% white over forest green
+
+# Material Icons: directions_run (filled). Lucide: circle-pause, gauge, timer.
+# Keep paths at their native 24x24 viewBox; no hand-built stick figures.
+TIME_CARD_ICONS = {
+    # Font Awesome Free 6.7.2 person-running (CC BY 4.0), Fonticons, Inc.
+    "runner": '<g fill="currentColor" stroke="none" transform="translate(2.8 1.5) scale(0.041)"><path d="M320 48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM125.7 175.5c9.9-9.9 23.4-15.5 37.5-15.5c1.9 0 3.8 .1 5.6 .3L137.6 254c-9.3 28 1.7 58.8 26.8 74.5l86.2 53.9-25.4 88.8c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l28.7-100.4c5.9-20.6-2.6-42.6-20.7-53.9L238 299l30.9-82.4 5.1 12.3C289 264.7 323.9 288 362.7 288l21.3 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-21.3 0c-12.9 0-24.6-7.8-29.5-19.7l-6.3-15c-14.6-35.1-44.1-61.9-80.5-73.1l-48.7-15c-11.1-3.4-22.7-5.2-34.4-5.2c-31 0-60.8 12.3-82.7 34.3L57.4 153.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l23.1-23.1zM91.2 352L32 352c-17.7 0-32 14.3-32 32s14.3 32 32 32l69.6 0c19 0 36.2-11.2 43.9-28.5L157 361.6l-9.5-6c-17.5-10.9-30.5-26.8-37.9-44.9L91.2 352z"/></g>',
+    "pause": ('<circle cx="12" cy="12" r="10"/><path d="M10 15V9m4 6V9"/>'),
+    "gauge": ('<path d="M12 14 8 10"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>'),
+    "gauge_max": ('<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>'),
+    "stopwatch": ('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6m-3 0v3m6 2 2-2"/>'),
+}
+
+
+def _time_font(size, weight="regular"):
+    """Use native-size uncondensed fonts; no horizontal rescaling."""
+    from PIL import ImageFont
+    candidates = {
+        "bold": ("/usr/share/fonts/opentype/inter/Inter-Bold.otf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        "semibold": ("/usr/share/fonts/opentype/inter/Inter-SemiBold.otf",
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        "regular": ("/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    }
+    for candidate in candidates[weight]:
+        if Path(candidate).is_file():
+            return ImageFont.truetype(candidate, size)
+    return font(size, weight != "regular")
+
+
+def _time_card_icon(d, x, y, kind, size=35, color=TIME_ICON_COLOR):
+    """Render standard 24x24 icon paths at 4x then downsample isotropically."""
+    from io import BytesIO
+    import cairosvg
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+           f'width="24" height="24"><g color="{color}" fill="none" '
+           f'stroke="{color}" stroke-width="2.4" stroke-linecap="round" '
+           f'stroke-linejoin="round">{TIME_CARD_ICONS[kind]}</g></svg>')
+    raw = cairosvg.svg2png(bytestring=svg.encode("utf-8"),
+                           output_width=size*4, output_height=size*4)
+    icon = Image.open(BytesIO(raw)).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+    d._image.paste(icon, (round(x), round(y)), icon)
+
+
+def _time_text(d, xy, value, size, color, weight="regular", spacing=0):
+    """Render Unicode text in one shaped run to preserve kerning and accents."""
+    face = _time_font(size, weight)
+    x, y = xy
+    # Pillow's native shaping keeps combining marks attached to their base glyph.
+    d.text((round(x), round(y)), str(value), font=face, fill=color,
+           anchor="lt", stroke_width=0)
+
+
+def _time_label(raw):
+    """Normalize abbreviations, not accents or the metrics themselves."""
+    import unicodedata
+    label = unicodedata.normalize("NFC", str(raw)).upper()
+    # Protect the conventional low period even if a source label uses a middle dot.
+    return label.replace("VEL˙", "VEL.").replace("VEL·", "VEL.")
+
+
+def draw_times_card(d, x, y, width, height, labels_and_values):
+    """Render a balanced 2x2 card; values come from the existing formatters."""
+    heading="Tiempos y velocidades" if str(labels_and_values[0][2]).startswith("es") else "Times & speeds"
+    _time_card_icon(d,x+22,y+19,"stopwatch",size=32)
+    _time_text(d,(x+65,y+21),heading,24,TIME_VALUE_COLOR,"semibold")
+
+    pad=20
+    top=y+76
+    bottom=y+height-18
+    mid_x=x+width/2
+    mid_y=(top+bottom)/2
+    d.line([(round(mid_x),round(top)),(round(mid_x),round(bottom))],fill=TIME_DIVIDER_COLOR,width=1)
+    d.line([(x+pad,round(mid_y)),(x+width-pad,round(mid_y))],fill=TIME_DIVIDER_COLOR,width=1)
+
+    col_width=width/2
+    row_height=(bottom-top)/2
+    icon_size=36
+    gap=12
+    for i,(label,value,_) in enumerate(labels_and_values):
+        col=i%2
+        row=i//2
+        left=x+col*col_width
+        center_y=top+(row+.5)*row_height
+        icon_x=left+19
+        # Icon and two-line text block share the same vertical centre.
+        icon_y=center_y-icon_size/2
+        text_x=icon_x+icon_size+gap
+        label_y=center_y-26
+        value_y=center_y+1
+        _time_card_icon(d,icon_x,icon_y,("runner","pause","gauge","gauge_max")[i],size=icon_size)
+        # Use a readable label size while respecting the available half-width.
+        available=(left+col_width-9)-text_x
+        label=_time_label(label)
+        label_size=14
+        face=_time_font(label_size,"semibold")
+        while label_size>11 and d.textlength(label,font=face)>available:
+            label_size-=1
+            face=_time_font(label_size,"semibold")
+        _time_text(d,(text_x,label_y),label,label_size,TIME_LABEL_COLOR,"semibold")
+        value_size=27
+        face=_time_font(value_size,"bold")
+        while value_size>19 and d.textlength(str(value),font=face)>available:
+            value_size-=1
+            face=_time_font(value_size,"bold")
+        _time_text(d,(text_x,value_y),str(value),value_size,TIME_VALUE_COLOR,"bold")
+
+
 def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     labels=_load_i18n(lang)
     img=Image.new("RGB",(W,H),BG)
@@ -298,17 +411,13 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     gradient_card(img,(M,y,M+half,y+278),"#244D3A","#19362D")
     gradient_card(img,(M+half+16,y,W-M,y+278),"#20443B","#152D29")
     d=ImageDraw.Draw(img)
-    title(d,M+24,y+21,_t(labels,"times_and_speeds"))
     time_data=[
-        (_t(labels,"moving_time"),_fmt_time(metrics["moving_time"])),
-        (_t(labels,"stopped"),_fmt_time(metrics["stopped_time"])),
-        (_t(labels,"avg_speed_total"),_fmt_speed(metrics["avg_speed_total"])),
-        (_t(labels,"max_speed"),_fmt_speed(metrics["max_speed"])),
+        (_t(labels,"moving_time"),_fmt_time(metrics["moving_time"]),lang),
+        (_t(labels,"stopped"),_fmt_time(metrics["stopped_time"]),lang),
+        (_t(labels,"avg_speed_total"),_fmt_speed(metrics["avg_speed_total"]),lang),
+        (_t(labels,"max_speed"),_fmt_speed(metrics["max_speed"]),lang),
     ]
-    for i,(lab,val) in enumerate(time_data):
-        xx=M+24+(i%2)*226
-        yy=y+85+(i//2)*91
-        _metric(d,xx,yy,lab,val,TEXT,26)
+    draw_times_card(d,M,y,half,278,time_data)
     rx=M+half+16
     title(d,rx+24,y+21,_t(labels,"slope_ratios"))
     ring(d,rx+135,y+144,48,metrics["uphill_ratio_pct"],GREEN)
