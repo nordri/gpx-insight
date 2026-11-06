@@ -177,15 +177,15 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
                            output_width=icon_size*2, output_height=icon_size*2)
     icon = Image.open(BytesIO(raw)).convert("RGBA").resize((icon_size, icon_size), Image.Resampling.LANCZOS)
     layer.alpha_composite(icon, (sc(18), sc(17)))
-    title_size = 21
+    title_size = 19 if w < 400 else 21
     # Badge remains within the card even for long localized headings.
     badge_value = "N/D" if distance_km is None else f"{float(distance_km):.2f} km"
-    badge_size = 15
-    badge_width = max(84, hd.textlength(badge_value, font=f(badge_size, "bold"))/S+24)
+    badge_size = 13 if w < 400 else 15
+    badge_width = max(70 if w < 400 else 84, hd.textlength(badge_value, font=f(badge_size, "bold"))/S+18)
     badge_left = w - 18 - badge_width
-    while title_size > 15 and hd.textlength(title_text, font=f(title_size,"bold"))/S > badge_left-59:
+    while title_size > 13 and hd.textlength(title_text, font=f(title_size,"bold"))/S > badge_left-52:
         title_size -= 1
-    write(56, 20, title_text, title_size, weight="bold")
+    write(49 if w < 400 else 56, 20, title_text, title_size, weight="bold")
     badge_bg = "#2E4B2B" if is_up else "#54352D"
     badge_fg = accent
     hd.rounded_rectangle((sc(badge_left),sc(17),sc(w-18),sc(47)),
@@ -193,13 +193,15 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     write((badge_left+w-18)/2, 32, badge_value, badge_size, badge_fg, "bold", "mm")
 
     # Columns: label left; both numeric values right-aligned.
-    # Compact, centered table: bring numeric columns closer to the grade ranges.
-    pad = max(20, w * .10)
-    dist_right = w * .60
-    pct_right = w * .84
-    write(pad, 76, "PENDIENTE" if lang.startswith("es") else "GRADE", 12, ANALYSIS_MUTED, "semibold")
-    write(dist_right, 76, "DISTANCIA" if lang.startswith("es") else "DISTANCE", 12, ANALYSIS_MUTED, "semibold", "rt")
-    write(pct_right, 76, "% RUTA" if lang.startswith("es") else "% ROUTE", 12, ANALYSIS_MUTED, "semibold", "rt")
+    # Symmetric narrow side cards with three genuinely compact columns.
+    pad = 17 if w < 400 else max(20, w * .10)
+    dist_right = w * (.67 if w < 400 else .60)
+    pct_right = w - (13 if w < 400 else w*.16)
+    head_size = 10 if w < 400 else 12
+    cell_size = 14 if w < 400 else 16
+    write(pad, 76, "PENDIENTE" if lang.startswith("es") else "GRADE", head_size, ANALYSIS_MUTED, "semibold")
+    write(dist_right, 76, "DISTANCIA" if lang.startswith("es") else "DISTANCE", head_size, ANALYSIS_MUTED, "semibold", "rt")
+    write(pct_right, 76, "% RUTA" if lang.startswith("es") else "% ROUTE", head_size, ANALYSIS_MUTED, "semibold", "rt")
     hd.line((sc(pad),sc(100),sc(w-pad),sc(100)), fill=ANALYSIS_DIVIDER, width=sc(.5))
     # Each row has the same baseline spacing and an individual bin accent.
     palette_up = ("#F4D03F", "#D4D65B", "#9BCF67", "#6CA87D")
@@ -207,20 +209,65 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     palette = palette_up if is_up else palette_down
     row_list = list(rows or [])[:4]
     for i, row in enumerate(row_list):
-        yy = 122 + i*31
+        yy = 111 + i*25
         dot_color = row.get("dot_color") or palette[i]
         hd.ellipse((sc(pad),sc(yy+6),sc(pad+9),sc(yy+15)), fill=dot_color)
-        write(pad+19, yy, row.get("label", ""), 16)
+        write(pad+15, yy, row.get("label", ""), cell_size)
         distance = row.get("distance_km")
         percentage = row.get("route_pct")
         dist_label = "N/D" if distance is None else f"{float(distance):.2f} km"
         pct_label = "N/D" if percentage is None else f"{float(percentage):.1f}%"
-        write(dist_right, yy, dist_label, 16, anchor="rt")
-        write(pct_right, yy, pct_label, 16, anchor="rt")
+        write(dist_right, yy, dist_label, cell_size, anchor="rt")
+        write(pct_right, yy, pct_label, cell_size, anchor="rt")
     if not row_list:
-        write(w/2, 177, "Sin datos de pendiente" if lang.startswith("es") else "No grade data", 15, ANALYSIS_MUTED, anchor="mm")
+        write(w/2, 155, "Sin datos de pendiente" if lang.startswith("es") else "No grade data", 15, ANALYSIS_MUTED, anchor="mm")
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x),round(y)), final)
+
+def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
+    """Center column of the uphill / flat / downhill triptych; no metric inference."""
+    from io import BytesIO
+    import cairosvg
+    S = 2
+    w, h = round(width), round(height)
+    if w <= 0 or h <= 0:
+        return
+    layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(layer)
+    hd.rounded_rectangle((0, 0, w*S-1, h*S-1), radius=22*S, fill=ANALYSIS_BG)
+    def face(sz, weight="regular"):
+        return _time_font(round(sz*S), weight)
+    def put(cx, cy, value, sz, color, weight="regular", anchor="mm"):
+        hd.text((round(cx*S), round(cy*S)), value, font=face(sz, weight), fill=color, anchor=anchor)
+
+    # Lucide arrow-left-right: standard path, identical visual weight to side icons.
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+           f'<g fill="none" stroke="{ANALYSIS_CREAM}" stroke-width="2" '
+           f'stroke-linecap="round" stroke-linejoin="round">'
+           f'<path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/>'
+           f'</g></svg>')
+    size = 24*S
+    raw = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=size*2, output_height=size*2)
+    icon = Image.open(BytesIO(raw)).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+    layer.alpha_composite(icon, (14*S, 18*S))
+    heading = "TRAMOS LLANOS" if lang.startswith("es") else "FLAT SECTIONS"
+    heading_size = 16
+    while heading_size > 12 and hd.textlength(heading, font=face(heading_size,"bold")) > (w-53)*S:
+        heading_size -= 1
+    put(45, 31, heading, heading_size, "#FFFFFF", "bold", "lm")
+
+    distance = metrics.get("flat_distance_km")
+    ratio = metrics.get("flat_ratio_pct")
+    value = "N/D" if distance is None else f"{float(distance):.2f} km"
+    percentage = "N/D" if ratio is None else f"({float(ratio):.1f}%)"
+    put(w/2, 105, value, 31 if w >= 220 else 26, "#A3E635", "bold")
+    put(w/2, 143, percentage, 19, "#FFFFFF", "semibold")
+    put(w/2, 173, "Pendiente < 1 %" if lang.startswith("es") else "Grade < 1%", 14, ANALYSIS_MUTED)
+    # Decorative contour, deliberately restrained and not data-bearing.
+    hd.line([(20*S, (h-21)*S), ((w-20)*S, (h-21)*S)], fill="#426047", width=S*2)
+    final = layer.resize((w, h), Image.Resampling.LANCZOS)
+    d._image.paste(final, (round(x), round(y)), final)
+
 
 def _distribution(d, x, y, width, metrics):
     ups = list(metrics.get("uphill_table") or [])
@@ -687,10 +734,15 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     draw_slope_distribution_card(d, M, y, INNER, 150, metrics, lang)
     y=1492
     d=ImageDraw.Draw(img)
-    draw_grade_analysis_card(d, M, y, half, 260,
+    # Three cards on the same row: climb | flat | descent.
+    gap = 10
+    center_w = 240
+    side_w = (INNER - center_w - 2*gap)//2
+    draw_grade_analysis_card(d, M, y, side_w, 258,
                              metrics.get("uphill_table"), metrics.get("uphill_distance_km"),
                              "up", lang)
-    draw_grade_analysis_card(d, M+half+16, y, half, 260,
+    draw_flat_sections_card(d, M+side_w+gap, y, center_w, 258, metrics, lang)
+    draw_grade_analysis_card(d, M+side_w+gap+center_w+gap, y, side_w, 258,
                              metrics.get("downhill_table"), metrics.get("downhill_distance_km"),
                              "down", lang)
     # Compact final data, preserving extreme grades and endpoints
