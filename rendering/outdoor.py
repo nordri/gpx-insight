@@ -207,24 +207,115 @@ def ring(d,cx,cy,r,value,color):
     txt(d,cx,cy-15,_grade(value),29,TEXT,True,anchor="mt")
 
 
-def slope_distribution(d,x,y,width,metrics):
-    ups=list(metrics.get("uphill_table") or [])
-    downs=list(metrics.get("downhill_table") or [])
-    values=[(_pct(row.get("route_pct")),SLOPE_UP[i],str(row.get("label",""))) for i,row in enumerate(ups[:4])]
-    values.append((_pct(metrics.get("flat_ratio_pct")),NEUTRAL,"< 1%"))
-    values += [(_pct(row.get("route_pct")),SLOPE_DOWN[i],str(row.get("label",""))) for i,row in enumerate(downs[:4])]
-    total=sum(v for v,_,_ in values)
-    if total<=0:
+# Slope distribution uses the nine validated analytics bins in their original order.
+DISTRIBUTION_COLORS = (
+    "#E95738", "#F18B35", "#F4D03F", "#C7DB69",
+    "#81958D", "#9CC4F0", "#73A5DF", "#4C79C4", "#345B9C",
+)
+DISTRIBUTION_FG = ("#FFFFFF", "#FFFFFF", "#14251B", "#14251B",
+                   "#FFFFFF", "#14251B", "#FFFFFF", "#FFFFFF", "#FFFFFF")
+
+
+def _distribution_bins(metrics):
+    ups = list(metrics.get("uphill_table") or [])[:4]
+    downs = list(metrics.get("downhill_table") or [])[:4]
+    rows = ups + [{"route_pct": metrics.get("flat_ratio_pct"), "label": "< 1%"}] + downs
+    if len(ups) != 4 or len(downs) != 4:
+        raise ValueError("Slope distribution requires four uphill and four downhill bins")
+    values = [max(0., float(r.get("route_pct") or 0.)) for r in rows]
+    total = sum(values)
+    # Use analytics percentages; only normalize for numerical rounding / missing fractions.
+    return [(v / total if total else 0., str(row.get("label") or ""), color, fg)
+            for v, row, color, fg in zip(values, rows, DISTRIBUTION_COLORS, DISTRIBUTION_FG)]
+
+
+def _distribution_font(size, bold=False):
+    from PIL import ImageFont
+    paths = (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    for path in paths:
+        if Path(path).exists():
+            return ImageFont.truetype(path, size)
+    return _font(size, bold=bold)
+
+
+def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
+    """Render at 2x, downsample once, and composite into the original canvas."""
+    from io import BytesIO
+    import cairosvg
+    S = 2
+    w, h = round(width), round(height)
+    layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(layer)
+    def xy(v): return round(v*S)
+    def text_at(cx, top, content, size, color, bold=False, anchor="mm"):
+        hd.text((xy(cx), xy(top)), content, font=_distribution_font(xy(size), bold),
+                fill=color, anchor=anchor)
+    hd.rounded_rectangle((0, 0, xy(w)-1, xy(h)-1), radius=xy(20), fill="#14251B")
+    # Lucide 'layers' official paths, native 24x24 viewBox.
+    icon_svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" '
+                f'viewBox="0 0 24 24" fill="none" stroke="#E6EBD9" '
+                f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                f'<path d="m12.83 2.18 8 4a2 2 0 0 1 0 3.58l-8 4a2 2 0 0 1-1.66 0l-8-4a2 2 0 0 1 0-3.58l8-4a2 2 0 0 1 1.66 0Z"/>'
+                f'<path d="m2 12 9.17 4.59a2 2 0 0 0 1.66 0L22 12M2 17l9.17 4.59a2 2 0 0 0 1.66 0L22 17"/>'
+                f'</svg>')
+    icon = Image.open(BytesIO(cairosvg.svg2png(bytestring=icon_svg.encode(),
+                 output_width=xy(25), output_height=xy(25)))).convert("RGBA")
+    layer.alpha_composite(icon, (xy(19), xy(13)))
+    heading = "Distribución de pendientes" if lang.startswith("es") else "Slope distribution"
+    text_at(54, 25, heading, 19, "#FFFFFF", True, "lm")
+
+    # An absent distribution is unknown, not nine measured zero-percent bins.
+    # Preserve the card and its dimensions without inventing analytics values.
+    has_distribution = (len(metrics.get("uphill_table") or []) >= 4
+                        and len(metrics.get("downhill_table") or []) >= 4
+                        and metrics.get("flat_ratio_pct") is not None)
+    if not has_distribution:
+        message = "Sin datos de pendiente" if lang.startswith("es") else "No slope data"
+        text_at(w / 2, 95, message, 15, "#CFD8CC", anchor="mm")
+        final = layer.resize((w, h), Image.Resampling.LANCZOS)
+        d._image.paste(final, (round(x), round(y)), final)
         return
-    cursor=x
-    for v,color,label in values:
-        sw=width*v/total
-        if sw>1:
-            d.rounded_rectangle((int(cursor),y,int(cursor+sw),y+27),radius=3,fill=color)
-        if sw>43:
-            txt(d,cursor+sw/2,y+4,f"{v:.1f}%",13,"#FFFFFF",True,anchor="mt")
-            txt(d,cursor+sw/2,y+34,label,13,MUTED,anchor="mt")
-        cursor+=sw
+
+    bins = _distribution_bins(metrics)
+    bar_x, bar_y, bar_w, bar_h = 19, 57, w-38, 32
+    bar = Image.new("RGBA", (xy(bar_w), xy(bar_h)), "#3B523E")
+    bd = ImageDraw.Draw(bar)
+    cumulative = 0.
+    centers = []
+    for fraction, label, color, fg in bins:
+        start = round(cumulative * bar.width)
+        cumulative += fraction
+        end = round(cumulative * bar.width)
+        if end > start:
+            bd.rectangle((start, 0, end-1, bar.height), fill=color)
+        centers.append(bar_x + (start + end)/(2*S))
+    mask = Image.new("L", bar.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0,0,bar.width-1,bar.height-1),
+                                           radius=xy(16), fill=255)
+    layer.paste(bar, (xy(bar_x), xy(bar_y)), mask)
+    for (fraction, label, color, fg), center in zip(bins, centers):
+        segment_width = fraction * bar_w
+        pct_text = f"{fraction*100:.1f}%"
+        # Only draw text where it fits; never let one percentage bleed into another bin.
+        font = _distribution_font(xy(12), True)
+        if segment_width*S >= hd.textlength(pct_text, font=font) + xy(7):
+            text_at(center, bar_y+bar_h/2, pct_text, 12, fg, True)
+        # Labels remain centered on the exact segment centers; omit when too narrow.
+        label_font = _distribution_font(xy(11))
+        if segment_width*S >= hd.textlength(label, font=label_font) + xy(4):
+            text_at(center, 104, label, 11, "#CFD8CC")
+    text_at(19, 132, "▲  SUBIDA FUERTE", 13, "#F4D03F", True, "lm")
+    text_at(w-19, 132, "BAJADA FUERTE  ▼", 13, "#FA6D4B", True, "rm")
+    final = layer.resize((w, h), Image.Resampling.LANCZOS)
+    d._image.paste(final, (round(x), round(y)), final)
+
+
+def slope_distribution(d, x, y, width, metrics):
+    """Legacy compatibility wrapper; prefer draw_slope_distribution_card."""
+    draw_slope_distribution_card(d, x, y, width, 150, metrics)
 
 
 # Tiempos y velocidades: one visual system, independent of analytics.
@@ -506,10 +597,8 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     draw_slope_ratios_card(d, rx, y, half, 278, metrics, labels)
     # Distribution & slope detail, use the existing validated bin data
     y=1325
-    gradient_card(img,(M,y,W-M,y+150),"#1D4235","#15342B")
     d=ImageDraw.Draw(img)
-    title(d,M+24,y+16,"Distribución de pendientes" if lang.startswith("es") else "Slope distribution")
-    slope_distribution(d,M+24,y+65,INNER-48,metrics)
+    draw_slope_distribution_card(d, M, y, INNER, 150, metrics, lang)
     y=1492
     gradient_card(img,(M,y,M+half,y+260),"#204334","#153128")
     gradient_card(img,(M+half+16,y,W-M,y+260),"#24413A","#183029")
