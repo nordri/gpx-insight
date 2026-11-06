@@ -340,6 +340,90 @@ def draw_times_card(d, x, y, width, height, labels_and_values):
         _time_text(d,(text_x,value_y),str(value),value_size,TIME_VALUE_COLOR,"bold")
 
 
+
+SLOPE_CARD_BG = "#182A1F"
+SLOPE_CARD_TRACK = "#3B523E"
+SLOPE_CARD_UP = "#A3E635"
+SLOPE_CARD_DOWN = "#F87150"
+SLOPE_CARD_CREAM = "#E6EBD9"
+
+
+def _slope_svg(d, x, y, size, content):
+    """Rasterize SVG at 4x; preserve its square aspect ratio."""
+    from io import BytesIO
+    import cairosvg
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" '
+           f'width="100" height="100">{content}</svg>')
+    raw = cairosvg.svg2png(bytestring=svg.encode("utf-8"),
+                           output_width=size * 4, output_height=size * 4)
+    icon = Image.open(BytesIO(raw)).convert("RGBA").resize(
+        (size, size), Image.Resampling.LANCZOS)
+    d._image.paste(icon, (round(x), round(y)), icon)
+
+
+def _slope_ring(d, cx, cy, percentage, accent, diameter=124):
+    """SVG-native circles with mathematically exact dash length and round caps."""
+    radius = 38
+    circumference = 2 * math.pi * radius
+    progress = max(0.0, min(100.0, float(percentage or 0)))
+    base = (f'<circle cx="50" cy="50" r="{radius}" fill="none" '
+            f'stroke="{SLOPE_CARD_TRACK}" stroke-width="9"/>')
+    if percentage is not None and progress > 0:
+        # A full circle must not show a gap caused by rounded stroke caps.
+        if progress >= 100:
+            base += (f'<circle cx="50" cy="50" r="{radius}" fill="none" '
+                     f'stroke="{accent}" stroke-width="9"/>')
+        else:
+            base += (f'<circle cx="50" cy="50" r="{radius}" fill="none" '
+                     f'stroke="{accent}" stroke-width="9" stroke-linecap="round" '
+                     f'stroke-dasharray="{circumference:.9f}" '
+                     f'stroke-dashoffset="{(circumference * (1 - progress / 100)):.9f}" '
+                     f'transform="rotate(-90 50 50)"/>')
+    _slope_svg(d, cx - diameter / 2, cy - diameter / 2, diameter, base)
+    value = _grade(percentage)
+    size = 21 if len(value) <= 5 else 18
+    d.text((round(cx), round(cy)), value, font=_time_font(size, "bold"),
+           fill="#FFFFFF", anchor="mm")
+
+
+def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
+    """Two symmetric slope ratios; all numerical inputs come from analytics."""
+    d.rounded_rectangle((x, y, x + width, y + height), radius=22,
+                        fill=SLOPE_CARD_BG)
+    # Official Lucide 'mountain' outline (24x24 path, scaled by SVG viewBox).
+    mountain = ('<g transform="translate(7 8) scale(3.5)" fill="none" '
+                f'stroke="{SLOPE_CARD_CREAM}" stroke-width="1.8" '
+                'stroke-linecap="round" stroke-linejoin="round">'
+                '<path d="m8 3 4 8 5-5 5 15H2L8 3Z"/></g>')
+    _slope_svg(d, x + 19, y + 17, 31, mountain)
+    heading = _t(labels, "slope_ratios")
+    d.text((x + 61, y + 21), heading, font=_time_font(23, "semibold"),
+           fill="#FFFFFF", anchor="lt")
+
+    centers = (x + width * .25, x + width * .75)
+    ring_y = y + 127
+    for cx, value, color, key in (
+        (centers[0], metrics.get("uphill_ratio_pct"), SLOPE_CARD_UP, "uphill_ratio"),
+        (centers[1], metrics.get("downhill_ratio_pct"), SLOPE_CARD_DOWN, "downhill_ratio"),
+    ):
+        _slope_ring(d, cx, ring_y, value, color)
+        d.text((round(cx), y + 201), _t(labels, key).upper(),
+               font=_time_font(14, "semibold"), fill="#CFD8CC", anchor="mt")
+
+    divider_y = y + 222
+    d.line([(x + 20, divider_y), (x + width - 20, divider_y)],
+           fill="#3B4B40", width=1)
+    for cx, value, color, arrow in (
+        (centers[0], metrics.get("ascent_per_km"), SLOPE_CARD_UP, "↑"),
+        (centers[1], metrics.get("descent_per_km"), SLOPE_CARD_DOWN, "↓"),
+    ):
+        label = f"{arrow} {_f(abs(value) if value is not None else None, 1, ' m/km')}"
+        size = 19
+        while size > 14 and d.textlength(label, font=_time_font(size, "semibold")) > width / 2 - 14:
+            size -= 1
+        d.text((round(cx), y + 240), label, font=_time_font(size, "semibold"),
+               fill=color, anchor="mt")
+
 def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     labels=_load_i18n(lang)
     img=Image.new("RGB",(W,H),BG)
@@ -419,14 +503,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     ]
     draw_times_card(d,M,y,half,278,time_data)
     rx=M+half+16
-    title(d,rx+24,y+21,_t(labels,"slope_ratios"))
-    ring(d,rx+135,y+144,48,metrics["uphill_ratio_pct"],GREEN)
-    ring(d,rx+350,y+144,48,metrics["downhill_ratio_pct"],ORANGE)
-    txt(d,rx+135,y+207,_t(labels,"uphill_ratio").upper(),14,MUTED,True,anchor="mt")
-    txt(d,rx+350,y+207,_t(labels,"downhill_ratio").upper(),14,MUTED,True,anchor="mt")
-    line(d,[(rx+24,y+234),(W-M-24,y+234)])
-    txt(d,rx+24,y+240,f"+ {_f(metrics['ascent_per_km'],1,' m/km')}",24,GREEN,True)
-    txt(d,rx+260,y+240,f"− {_f(metrics['descent_per_km'],1,' m/km')}",24,ORANGE,True)
+    draw_slope_ratios_card(d, rx, y, half, 278, metrics, labels)
     # Distribution & slope detail, use the existing validated bin data
     y=1325
     gradient_card(img,(M,y,W-M,y+150),"#1D4235","#15342B")
