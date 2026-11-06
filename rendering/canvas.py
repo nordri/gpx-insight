@@ -114,15 +114,15 @@ THEMES = {
         "bg_top": "#052425",
         "bg_bottom": "#011717",
         "panel": "#032024",
-        "border": "#7e8f1d",
+        "border": "#345b50",
         "text": "#e8f2cc",
         "muted": "#a4b98e",
-        "accent": "#d5e327",
-        "up": "#97d620",
-        "down": "#ff4520",
+        "accent": "#c8dc73",
+        "up": "#9dd66b",
+        "down": "#f08065",
         "warning": "#ffb300",
         "neutral": "#6f7e6e",
-        "cold": "#3f8de8",
+        "cold": "#7bb9df",
     },
     "volcanic": {
         "bg_top": "#2a0f0b",
@@ -133,7 +133,7 @@ THEMES = {
         "muted": "#d4ab9d",
         "accent": "#ff8b61",
         "up": "#ffb057",
-        "down": "#ff4520",
+        "down": "#f08065",
         "warning": "#ffd166",
         "neutral": "#6c4a40",
         "cold": "#85c2ff",
@@ -516,56 +516,46 @@ def _fit_title_lines(
     max_width: int,
     max_lines: int = 2,
     start_size: int = 72,
-    min_size: int = 42,
+    min_size: int = 34,
 ):
-    words = (text or "Unnamed Route").strip().split()
-    if not words:
-        return ["Unnamed Route"], _font(min_size, bold=True)
+    """Fit a title by measured pixel width, preserving whole words where possible."""
+    words = (text or "Unnamed Route").strip().split() or ["Unnamed", "Route"]
 
-    for size in range(start_size, min_size - 1, -2):
-        font = _font(size, bold=True)
+    def wrap(font):
         lines = []
         current = ""
-        overflow = False
-
-        for idx, word in enumerate(words):
+        for word in words:
             candidate = f"{current} {word}".strip()
             if draw.textlength(candidate, font=font) <= max_width:
                 current = candidate
-                continue
-
-            if current:
-                lines.append(current)
-                current = word
             else:
+                if current:
+                    lines.append(current)
                 current = word
-
-            if len(lines) == max_lines:
-                overflow = True
-                break
-
-            if idx == len(words) - 1 and current:
-                lines.append(current)
-
-        if not overflow and current and (not lines or lines[-1] != current):
+        if current:
             lines.append(current)
+        return lines
 
-        if len(lines) <= max_lines and not overflow:
-            return lines[:max_lines], font
+    for size in range(start_size, min_size - 1, -2):
+        font = _font(size, bold=True)
+        lines = wrap(font)
+        if len(lines) <= max_lines and all(
+            draw.textlength(line, font=font) <= max_width for line in lines
+        ):
+            return lines, font
 
     font = _font(min_size, bold=True)
-    raw = " ".join(words)
-    first = raw
-    while first and draw.textlength(first, font=font) > max_width:
-        first = first[:-1]
-    first = first.rstrip() or "Unnamed Route"
-
-    remaining = raw[len(first):].strip()
-    second = remaining
-    while second and draw.textlength(f"{second}...", font=font) > max_width:
-        second = second[:-1]
-    second = f"{second.rstrip()}..." if second else "..."
-    return [first, second], font
+    lines = wrap(font)
+    kept = lines[:max_lines]
+    if len(lines) > max_lines or any(
+        draw.textlength(line, font=font) > max_width for line in kept
+    ):
+        # The final line carries all remaining text, with a measured ellipsis.
+        remaining = " ".join(lines[max_lines - 1:])
+        while remaining and draw.textlength(remaining + "…", font=font) > max_width:
+            remaining = remaining[:-1]
+        kept[-1] = remaining.rstrip() + "…"
+    return kept, font
 
 
 # Render final story image
@@ -578,6 +568,10 @@ def render_story(
     theme="forest",
     lang="en"
 ):
+    if theme == "forest":
+        from rendering.outdoor import render_outdoor_story
+        return render_outdoor_story(metadata, metrics, chart_path, output_path, lang=lang)
+
     colors = THEMES.get(theme, THEMES["forest"])
     labels = _load_i18n(lang)
     icons = _load_required_icons()
@@ -624,7 +618,7 @@ def render_story(
     )
     draw.text((margin + 24, y + 64), title_lines[0], fill=colors["text"], font=title_font)
     if len(title_lines) > 1:
-        draw.text((margin + 24, y + 132), title_lines[1], fill=colors["text"], font=title_font)
+        draw.text((margin + 24, y + 64 + max(52, title_font.size + 7)), title_lines[1], fill=colors["text"], font=title_font)
 
     metrics_top = y + 254
     card_w = int((content_w - 48) / 5)
