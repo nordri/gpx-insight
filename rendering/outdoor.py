@@ -703,6 +703,70 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
     d._image.paste(card, (round(x), round(y)), card)
 
 
+
+def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
+    """Right footer card: start/end altitude, rendered at 2x without metric mutation."""
+    from io import BytesIO
+    import cairosvg
+
+    scale = 2
+    w, h = round(width), round(height)
+    layer = Image.new("RGBA", (w * scale, h * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    def px(n):
+        return round(n * scale)
+    def f(size, bold=False):
+        return _time_font(px(size), "bold" if bold else "regular")
+
+    draw.rounded_rectangle((0, 0, px(w)-1, px(h)-1), radius=px(22), fill="#14251B")
+    # The same official Lucide 'layers' paths used in the slope distribution card.
+    icon_svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+                'fill="none" stroke="#E6EBD9" stroke-width="1.8" '
+                'stroke-linecap="round" stroke-linejoin="round">'
+                '<path d="m12.83 2.18 8 4a2 2 0 0 1 0 3.58l-8 4a2 2 0 0 1-1.66 0l-8-4a2 2 0 0 1 0-3.58l8-4a2 2 0 0 1 1.66 0Z"/>'
+                '<path d="m2 12 9.17 4.59a2 2 0 0 0 1.66 0L22 12M2 17l9.17 4.59a2 2 0 0 0 1.66 0L22 17"/>'
+                '</svg>')
+    icon = Image.open(BytesIO(cairosvg.svg2png(bytestring=icon_svg.encode("utf-8"),
+                     output_width=px(26), output_height=px(26)))).convert("RGBA")
+    layer.alpha_composite(icon, (px(19), px(15)))
+    heading = "Altitud" if lang.startswith("es") else "Altitude"
+    draw.text((px(58), px(18)), heading, font=f(19, True), fill="#FFFFFF")
+
+    # Two balanced columns: prominent altitude above its descriptive label.
+    # A centered separator replaces the old horizontal row divider.
+    mid = w / 2
+    draw.line((px(mid), px(76), px(mid), px(h - 24)),
+              fill=(255, 255, 255, 31), width=scale)
+    columns = [
+        ("Altura inicio" if lang.startswith("es") else "Start altitude",
+         metrics.get("elevation_start_m"), "#D2DFD0", "#64B5F6", w / 4),
+        ("Altura fin" if lang.startswith("es") else "End altitude",
+         metrics.get("elevation_end_m"), "#F5B041", "#F5B041", 3 * w / 4),
+    ]
+    for label, value, dot_color, value_color, cx in columns:
+        value_text = "N/D" if value is None else f"{int(round(value)):,} m"
+        value_size = 29
+        label_size = 18
+        max_text_width = w / 2 - 42
+        while value_size > 18 and draw.textlength(value_text, font=f(value_size, True)) > px(max_text_width):
+            value_size -= 1
+        while label_size > 13 and draw.textlength(label, font=f(label_size, True)) > px(max_text_width - 18):
+            label_size -= 1
+        draw.text((px(cx), px(123)), value_text, font=f(value_size, True),
+                  fill=value_color, anchor="mm")
+        label_width = draw.textlength(label, font=f(label_size, True)) / scale
+        dot_radius = 5
+        gap = 12
+        group_width = dot_radius * 2 + gap + label_width
+        left = cx - group_width / 2
+        draw.ellipse((px(left), px(181-dot_radius), px(left+dot_radius*2), px(181+dot_radius)),
+                     fill=dot_color)
+        draw.text((px(left+dot_radius*2+gap), px(181)), label,
+                  font=f(label_size, True), fill="#FFFFFF", anchor="lm")
+    layer = layer.resize((w, h), Image.Resampling.LANCZOS)
+    d._image.paste(layer, (round(x), round(y)), layer)
+
+
 def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     labels=_load_i18n(lang)
     img=Image.new("RGB",(W,H),BG)
@@ -810,15 +874,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     d = ImageDraw.Draw(img)
     draw_extreme_grades_card(d, M, y, footer_left_w, 240, metrics, lang)
 
-    # Preserve the previously displayed start/end altitude information in the
-    # right-hand footer area until its dedicated card is redesigned.
-    d.rounded_rectangle((footer_right_x, y, footer_right_x + footer_right_w,
-                         y + 240), radius=22, fill="#14251B")
-    txt(d, footer_right_x + 24, y + 24,
-        "ALTITUD" if lang.startswith("es") else "ALTITUDE", 22, TEXT, True)
-    txt(d, footer_right_x + 24, y + 91,
-        f"{_fmt_m(metrics['elevation_start_m'])} → {_fmt_m(metrics['elevation_end_m'])}",
-        27, TEXT, True)
+    draw_altitude_card(d, footer_right_x, y, footer_right_w, 240, metrics, lang)
     footer_landscape(img)
     d = ImageDraw.Draw(img)
     txt(d, M, H - 66,
