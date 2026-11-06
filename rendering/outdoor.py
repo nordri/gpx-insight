@@ -24,7 +24,7 @@ GREEN = "#B6D49A"
 ORANGE = "#E8A17F"
 BLUE = "#99C8CE"
 NEUTRAL = "#81958D"
-W, H = WIDTH, max(HEIGHT, 2140)  # Footer cards need their own vertical space.
+W, H = WIDTH, max(HEIGHT, 2160)  # Footer cards need their own vertical space.
 M = 46
 INNER = W - 2 * M
 
@@ -311,11 +311,128 @@ def scenic_header(img):
     img.paste(scene.convert("RGB"), (0, 0))
 
 
-def footer_landscape(img):
-    with Image.open(ASSET_DIR / "mountain-footer.png") as source:
-        layer = source.convert("RGBA")
-        layer = layer.resize((W, 48), Image.Resampling.LANCZOS)
-        img.paste(layer, (0, H-layer.height), layer)
+def footer_landscape(img, point_count, lang="es", background_path=None):
+    """Natural continuous mountain landscape; 2x supersampling, no anisotropic scaling.
+
+    Fits the available 150 px band below the footer cards. The supplied optional
+    image uses aspect-preserving cover/crop. The generated scene is deterministic.
+    """
+    import random
+    from PIL import ImageOps
+
+    scale = 2
+    height = 150
+    width = W
+    sw, sh = width * scale, height * scale
+    top = img.height - height
+    scene = Image.new("RGB", (sw, sh), "#14251B")
+    d = ImageDraw.Draw(scene)
+    rng = random.Random(67421)
+
+    if background_path is not None:
+        with Image.open(background_path) as source:
+            scene = ImageOps.fit(source.convert("RGB"), (sw, sh),
+                                 method=Image.Resampling.LANCZOS,
+                                 centering=(0.5, 0.5))
+        scene = Image.blend(scene, Image.new("RGB", (sw, sh), "#14251B"), 0.32)
+        d = ImageDraw.Draw(scene)
+    else:
+        # Full-height atmospheric gradient, drawn at the final 2x canvas ratio.
+        for y in range(sh):
+            t = y / max(1, sh - 1)
+            t = t * t * (3 - 2 * t)
+            c0, c1 = (15, 31, 23), (54, 79, 62)
+            d.line((0, y, sw, y), fill=tuple(round(a*(1-t)+b*t) for a,b in zip(c0,c1)))
+
+        # Continuous asymmetric ridge: broad distant shoulders on the left,
+        # one dominant rugged summit at ~76% of the width, no cloned triangles.
+        anchors = [(0,.63),(.10,.61),(.20,.56),(.30,.61),(.39,.51),
+                   (.48,.56),(.56,.45),(.64,.49),(.71,.36),(.765,.19),
+                   (.80,.30),(.84,.36),(.89,.48),(.95,.43),(1,.53)]
+        def ridge_at(x):
+            u=x/sw
+            for i in range(len(anchors)-1):
+                u0,v0=anchors[i]; u1,v1=anchors[i+1]
+                if u <= u1:
+                    f=max(0,min(1,(u-u0)/(u1-u0)))
+                    base=v0+(v1-v0)*f
+                    # Small-scale irregularity, vanishing near the left text area.
+                    detail=(.011*math.sin(u*91)+.006*math.sin(u*183+1.4))*(.35+.65*u)
+                    return round(sh*(base+detail))
+            return round(sh*anchors[-1][1])
+        ridge=[(x,ridge_at(x)) for x in range(0,sw+1,3)]
+        d.polygon(ridge+[(sw,sh),(0,sh)],fill="#526E5C")
+        # Terrain facet under the dominant summit, integrated with the ridge.
+        peak_x=int(sw*.765); peak_y=ridge_at(peak_x)
+        d.polygon([(peak_x,peak_y),(int(sw*.68),ridge_at(int(sw*.68))),
+                   (int(sw*.73),int(sh*.64)),(int(sw*.81),int(sh*.79)),
+                   (int(sw*.805),ridge_at(int(sw*.805)))],fill="#718B77")
+        d.polygon([(peak_x,peak_y),(int(sw*.805),ridge_at(int(sw*.805))),
+                   (int(sw*.89),int(sh*.75)),(int(sw*.82),int(sh*.68))],fill="#354E40")
+        # Broken rock/snow facets, not a flat white triangular cap.
+        d.polygon([(peak_x,peak_y),(peak_x-42,peak_y+32),
+                   (peak_x-17,peak_y+23),(peak_x+9,peak_y+47),
+                   (peak_x+28,peak_y+26)],fill="#DCE8D8")
+        d.polygon([(peak_x+28,peak_y+26),(peak_x+9,peak_y+47),
+                   (peak_x+55,peak_y+68),(peak_x+75,peak_y+84)],fill="#90A897")
+        # A smaller connected rocky shoulder, mostly shadowed.
+        shoulder=int(sw*.56); sy=ridge_at(shoulder)
+        d.polygon([(shoulder,sy),(shoulder-24,sy+27),
+                   (shoulder+8,sy+16),(shoulder+37,sy+37)],fill="#A5B9A7")
+
+        # Layered, smooth continuous foothills, without horizontal baselines.
+        for base,amp,freq,color,phase in [(.70,.050,2.5,"#304B39",.4),
+                                           (.79,.042,3.3,"#203A2B",1.6),
+                                           (.88,.038,4.1,"#152B20",2.1)]:
+            curve=[]
+            for x in range(0,sw+1,4):
+                u=x/sw
+                y=sh*(base+amp*math.sin(2*math.pi*freq*u+phase)
+                      +.012*math.sin(2*math.pi*7.1*u+phase*.8))
+                curve.append((x,round(y)))
+            d.polygon(curve+[(sw,sh),(0,sh)],fill=color)
+
+        # Dense overlapping conifers in three depth planes, 140+ varied trees.
+        # Their trunks terminate below the canvas; no flat dark strip at bottom.
+        for layer, count, bottom, color, hmin,hmax in [
+            (0,56,.98,"#1B3326",22,61),
+            (1,65,1.06,"#11261B",30,84),
+            (2,76,1.12,"#0B1610",40,103),
+        ]:
+            positions=sorted(rng.uniform(-25,sw+25) for _ in range(count))
+            for x in positions:
+                h=rng.uniform(hmin,hmax)
+                by=sh*bottom+rng.uniform(-8,13)
+                tip=by-h
+                trunk=max(2.0,h*.045)
+                d.rectangle((x-trunk,tip+h*.35,x+trunk,by+8),fill=color)
+                # Overlapping tapered foliage tiers, varying crown shape.
+                for j in range(3):
+                    y=tip+j*h*.21
+                    spread=h*(.16+j*.062)*rng.uniform(.88,1.16)
+                    d.polygon([(x,y),(x-spread,y+h*.49),
+                               (x+spread,y+h*.49)],fill=color)
+
+    # Dedicated subtle text-safe gradient on the LEFT only. No stretch, no crop
+    # after text drawing, and the text is always drawn on the 2x canvas.
+    veil=Image.new("RGBA",(sw,sh),(0,0,0,0))
+    vd=ImageDraw.Draw(veil)
+    for x in range(int(sw*.65)):
+        a=round(115*(1-x/(sw*.65))**1.8)
+        vd.line((x,0,x,int(sh*.43)),fill=(8,23,16,a))
+    scene=Image.alpha_composite(scene.convert("RGBA"),veil)
+    d=ImageDraw.Draw(scene)
+    label="Análisis técnico de ruta" if lang=="es" else "Technical route analysis"
+    suffix="puntos GPS" if lang=="es" else "GPS points"
+    caption=f"{label} · {point_count} {suffix}"
+    fonts=["/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+           "/usr/share/fonts/truetype/liberation2/LiberationSans-Italic.ttf"]
+    font_path=next((f for f in fonts if Path(f).is_file()),None)
+    text_font=ImageFont.truetype(font_path, 19*scale) if font_path else _font(19*scale)
+    d.text((40*scale,25*scale),caption,font=text_font,fill="#E4F0E3",
+           stroke_width=0)
+    scene=scene.convert("RGB").resize((width,height),Image.Resampling.LANCZOS)
+    img.paste(scene,(0,top))
 
 
 def gradient_card(img, box, top, bottom, radius=23):
@@ -875,11 +992,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     draw_extreme_grades_card(d, M, y, footer_left_w, 240, metrics, lang)
 
     draw_altitude_card(d, footer_right_x, y, footer_right_w, 240, metrics, lang)
-    footer_landscape(img)
-    d = ImageDraw.Draw(img)
-    txt(d, M, H - 66,
-        f"{_t(labels, 'footer')}  ·  {metrics['point_count']} {_t(labels, 'gps_points')}",
-        19, MUTED)
+    footer_landscape(img, metrics["point_count"], lang)
     out=Path(output_path)
     out.parent.mkdir(parents=True,exist_ok=True)
     img.save(out)
