@@ -939,6 +939,139 @@ def _draw_scaled_card(img, painter, x, y, width, height, native_height, *args):
     img.paste(layer, (int(x), int(y)))
 
 
+def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
+                                chart_path=None, lang="es"):
+    """Render the elevation profile and its three anchored callouts in Pillow.
+
+    The input series and ascent/descent metrics are used unchanged. When the
+    series is absent, the existing chart asset remains the fallback.
+    """
+    from PIL import ImageChops
+
+    w, h = int(width), int(height)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=25,
+                        fill="#112217", outline=(255, 255, 255, 46), width=1)
+    d.text((26, 21), _t(labels, "elevation_profile"),
+           font=font(27, True), fill="#F0F1E3")
+
+    def pill(bx, by, label, accent, bg, border):
+        bw, bh = 161, 49
+        d.rounded_rectangle((bx, by, bx + bw, by + bh), radius=22,
+                            fill=bg, outline=border, width=1)
+        d.text((bx + bw / 2, by + bh / 2), label,
+               font=font(20, True), fill=accent, anchor="mm")
+
+    def fmt_signed(value, prefix):
+        return prefix + (_fmt_m(value) if value is not None else "N/D")
+
+    pill(w - 352, 13, "↑ " + fmt_signed(metrics.get("elevation_gain_m"), "+"),
+         "#A3E635", "#1D3824", "#567C3C")
+    pill(w - 179, 13, "↓ " + fmt_signed(metrics.get("elevation_loss_m"), "-"),
+         "#FA6D4B", "#392621", "#805044")
+
+    distances = metrics.get("distance_series_km") or []
+    elevations = metrics.get("elevation_series_m") or []
+    pairs = [(float(km), float(z)) for km, z in zip(distances, elevations)
+             if km is not None and z is not None and math.isfinite(float(km))
+             and math.isfinite(float(z))]
+    left, right = 125, w - 30
+    top, bottom = 116, h - 52
+    if len(pairs) < 2 or pairs[-1][0] <= pairs[0][0]:
+        if chart_path:
+            with Image.open(chart_path) as src:
+                chart = src.convert("RGBA")
+                chart.thumbnail((right - left, bottom - top), Image.Resampling.LANCZOS)
+                layer.alpha_composite(chart, (left + (right-left-chart.width)//2,
+                                               top + (bottom-top-chart.height)//2))
+    else:
+        zmin = min(z for _, z in pairs)
+        zmax = max(z for _, z in pairs)
+        span = max(1.0, zmax - zmin)
+        # Headroom is reserved for the peak label; plot remains tall.
+        floor = zmin - span * .10
+        ceiling = zmax + span * .23
+        xmin, xmax = pairs[0][0], pairs[-1][0]
+        def xy(km, z):
+            return (left + (km - xmin) / (xmax - xmin) * (right-left),
+                    bottom - (z - floor) / (ceiling-floor) * (bottom-top))
+        coords = [xy(km, z) for km, z in pairs]
+        for j in range(4):
+            yy = top + (bottom-top)*j/3
+            d.line((left, yy, right, yy), fill=(128, 169, 116, 38), width=1)
+        # A clipped alpha mask ensures the fill vanishes at the chart baseline.
+        mask = Image.new("L", (w, h), 0)
+        md = ImageDraw.Draw(mask)
+        md.polygon(coords + [(right, bottom), (left, bottom)], fill=255)
+        gradient = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        gd = ImageDraw.Draw(gradient)
+        for yy in range(top, bottom + 1):
+            alpha = round(122 * (1 - (yy-top)/max(1,bottom-top))**1.2)
+            gd.line((left, yy, right, yy), fill=(163, 230, 53, alpha))
+        gradient.putalpha(ImageChops.multiply(gradient.getchannel("A"), mask))
+        layer.alpha_composite(gradient)
+        d = ImageDraw.Draw(layer)
+        d.line(coords, fill="#C6F135", width=3, joint="curve")
+
+        # Distance ticks and axis caption occupy the final 35 px of the card.
+        for i in range(5):
+            xx = left + (right-left)*i/4
+            d.text((xx, bottom + 7), f"{xmin+(xmax-xmin)*i/4:.1f}",
+                   font=font(14), fill="#B9CDAF", anchor="mt")
+        axis_name = "Distancia (km)" if lang.startswith("es") else "Distance (km)"
+        d.text((w/2, h-15), axis_name, font=font(16),
+               fill="#D1E1C4", anchor="mm")
+
+        def callout(point, value, kind):
+            cx, cy = point
+            label = ("▲ " if kind == "peak" else "") + f"{round(value):,} m"
+            fnt = font(18, True)
+            tw = d.textbbox((0,0), label, font=fnt)[2]
+            bw, bh = tw + 25, 35
+            if kind == "start":
+                bx = cx + 15
+            elif kind == "end":
+                bx = cx - bw - 15
+            else:
+                bx = cx - bw/2
+            bx = max(8, min(w-bw-8, bx))
+            by = max(72, cy - bh - 19)
+            # Keep callouts from colliding with the upper stat pills.
+            by = max(75, by)
+            anchor_x = bx + (8 if kind == "start" else bw-8 if kind == "end" else bw/2)
+            d.line((anchor_x, by+bh, cx, cy), fill=(240, 246, 229, 190), width=1)
+            d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=9,
+                                fill="#16281D", outline=(255,255,255,65), width=1)
+            d.text((bx+bw/2, by+bh/2), label, font=fnt,
+                   fill="#F5F5E8", anchor="mm")
+            d.ellipse((cx-5,cy-5,cx+5,cy+5), fill="#FFFFFF")
+
+        peak_idx = max(range(len(pairs)), key=lambda i: pairs[i][1])
+        # Paint peak first so endpoint labels stay legible on short routes.
+        callout(coords[peak_idx], pairs[peak_idx][1], "peak")
+        callout(coords[0], pairs[0][1], "start")
+        callout(coords[-1], pairs[-1][1], "end")
+
+        # Draw the altitude axis last so its labels remain above the fill.
+        axis_color = "#DDE8D2"
+        d.line((left, top, left, bottom), fill=(198, 225, 184, 180), width=2)
+        for i in range(5):
+            altitude = floor + (ceiling - floor) * i / 4
+            tick_y = bottom - (bottom - top) * i / 4
+            d.line((left - 7, tick_y, left, tick_y), fill=axis_color, width=2)
+            d.text((left - 13, tick_y), f"{altitude:,.0f}",
+                   font=font(18, True), fill=axis_color, anchor="rm")
+        d.text((left - 8, top - 24), "ALTITUD (m)" if lang.startswith("es")
+               else "ELEVATION (m)", font=font(15, True),
+               fill=axis_color, anchor="rm")
+
+    # Border last: remains crisp over gradient, grid, and profile.
+    d.rounded_rectangle((0, 0, w-1, h-1), radius=25,
+                        outline=(255, 255, 255, 46), width=1)
+    img.paste(layer, (round(x), round(y)), layer)
+
+
 def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     labels = _load_i18n(lang)
     img = Image.new("RGB", (W, H), BG)
@@ -987,27 +1120,10 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     txt(d, W - M - 12, y_cursor + 4, f"{_t(labels,'end')}: {_fmt_time(metrics['end_time'])}", 25, TEXT, True, anchor="ra")
     y_cursor += ROW_HEIGHTS[2] + GAP
 
-    # Elevation chart; preserve the chart data and its aspect ratio.
-    chart_y = y_cursor
-    chart_h = ROW_HEIGHTS[3]
-    gradient_card(img, (M, chart_y, W - M, chart_y + chart_h), "#1B3C32", "#142A26", 26)
-    d = ImageDraw.Draw(img)
-    _tiny_icon(d, M + 24, chart_y + 18, "mountain", GREEN, .95)
-    title(d, M + 66, chart_y + 16, _t(labels, "elevation_profile"))
-    badge_y = chart_y + 8
-    badge_gap, badge_width = 12, 174
-    right = W - M - 24
-    _elevation_stat_box(d, right - 2 * badge_width - badge_gap, badge_y,
-                        _t(labels, "ascent"), "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up")
-    _elevation_stat_box(d, right - badge_width, badge_y,
-                        _t(labels, "descent"), "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down")
-    with Image.open(chart_path) as chart_src:
-        chart = chart_src.convert("RGBA")
-        chart.thumbnail((INNER - 55, chart_h - 92), Image.Resampling.LANCZOS)
-        box = Image.new("RGBA", (INNER - 48, chart_h - 88), (0, 0, 0, 0))
-        box.alpha_composite(chart, ((box.width - chart.width) // 2,
-                                    (box.height - chart.height) // 2))
-        img.paste(box, (M + 24, chart_y + 82), box)
+    # Elevation profile is drawn from the existing metric series, without
+    # recalculating elevation, distance, or any route statistics.
+    draw_elevation_profile_card(img, M, y_cursor, INNER, ROW_HEIGHTS[3],
+                                metrics, labels, chart_path, lang)
     y_cursor += ROW_HEIGHTS[3] + GAP
 
     # Two columns. Existing card painters are unchanged.
