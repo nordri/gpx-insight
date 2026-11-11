@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 
 from rendering.canvas import (
     WIDTH, HEIGHT, _font, _fit_title_lines, _fmt_km, _fmt_m,
@@ -301,19 +301,57 @@ SLOPE_DOWN = ("#9CC4F0", "#73A5DF", "#4C79C4", "#345B9C")
 
 
 def scenic_header(img, height=320):
-    """Composite an illustrated background with a legibility gradient."""
+    """Cover-crop the header photo and shade its lower half for readable text."""
+    if not 300 <= height <= 320:
+        raise ValueError("Header height must be between 300 and 320 px")
     asset = ASSET_DIR / "mountain-header.jpg"
     with Image.open(asset) as source:
-        scene = source.convert("RGB").resize((W, height), Image.Resampling.LANCZOS)
-    overlay = Image.new("RGBA", (W, height))
-    opx = overlay.load()
-    for yy in range(height):
-        for xx in range(W):
-            # Darker at left and bottom, keeping the title readable.
-            darkness = int(216 * (1 - xx / W) ** 1.5 + 65 * (yy / height))
-            opx[xx, yy] = (7, 27, 23, min(240, darkness))
-    scene = Image.alpha_composite(scene.convert("RGBA"), overlay)
+        scene = ImageOps.fit(source.convert("RGB"), (W, height),
+                             method=Image.Resampling.LANCZOS,
+                             centering=(0.5, 0.5)).convert("RGBA")
+    # A transparent-to-dark green gradient confined to the lower half.
+    overlay = Image.new("RGBA", (1, height), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    for yy in range(height // 2, height):
+        fraction = (yy - height // 2) / max(1, height - height // 2 - 1)
+        od.point((0, yy), fill=(7, 23, 20, round(210 * fraction)))
+    overlay = overlay.resize((W, height))
+    scene = Image.alpha_composite(scene, overlay)
     img.paste(scene.convert("RGB"), (0, 0))
+
+
+def _header_title_lines(draw, raw_title, max_width=INNER, size=38):
+    """Remove Wikiloc prefix and fit at most two measured lines with '...' truncation."""
+    clean = str(raw_title or "").strip()
+    if clean.startswith("Wikiloc - "):
+        clean = clean[len("Wikiloc - "):].strip()
+    font_obj = font(size, True)
+    words = clean.split()
+    lines = []
+    current = ""
+    for index, word in enumerate(words):
+        candidate = (current + " " + word).strip()
+        if draw.textlength(candidate, font=font_obj) <= max_width:
+            current = candidate
+            continue
+        if len(lines) == 1:
+            # Include the overflowing word in the truncated second line.
+            remaining = (current + " " + " ".join(words[index:])).strip()
+            while remaining and draw.textlength(remaining + "...", font=font_obj) > max_width:
+                remaining = remaining[:-1]
+            return [lines[0], remaining.rstrip() + "..."]
+        if current:
+            lines.append(current)
+            current = word
+        else:
+            # An individual word can exceed the available width.
+            remaining = word
+            while remaining and draw.textlength(remaining + "...", font=font_obj) > max_width:
+                remaining = remaining[:-1]
+            return [remaining.rstrip() + "..."]
+    if current:
+        lines.append(current)
+    return lines[:2]
 
 
 def footer_landscape(img, point_count, lang="es", background_path=None, top=None, height=100):
@@ -906,19 +944,19 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     img = Image.new("RGB", (W, H), BG)
     y_cursor = TOP_MARGIN
 
-    # Header image bleeds to the top edge; content stays within its budget.
-    scenic_header(img, y_cursor + ROW_HEIGHTS[0])
+    # Header photo is cropped to its 320 px band, flush with the top edge.
+    scenic_header(img, ROW_HEIGHTS[0])
     d = ImageDraw.Draw(img)
     _tiny_icon(d, M, y_cursor + 8, "mountain", GREEN, 1.15)
     txt(d, M + 51, y_cursor + 9, "GPX  /  INSIGHT", 21, GREEN, True)
     date = _route_date_label(metadata, lang)
     txt(d, M, y_cursor + 62, date.upper(), 19, MUTED, True)
     name = metadata.get("name") or _t(labels, "unnamed_route")
-    title_lines, title_font = _fit_title_lines(d, name, INNER - 20, 3, 51, 30)
-    ty = y_cursor + 99
+    title_lines = _header_title_lines(d, name, INNER, 38)
+    ty = y_cursor + 111
     for ln in title_lines:
-        txt(d, M, ty, ln, title_font.size, TEXT, True)
-        ty += title_font.size + 10
+        txt(d, M, ty, ln, 38, TEXT, True)
+        ty += 50
     y_cursor += ROW_HEIGHTS[0] + GAP
 
     # Four summary tiles: use the full 100 px row.
