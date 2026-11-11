@@ -11,7 +11,7 @@ class OutdoorAssetsTests(unittest.TestCase):
     def test_header_and_footer_keep_canvas_size(self):
         image=Image.new("RGB",(1080,1920),"#101F1D")
         scenic_header(image)
-        footer_landscape(image)
+        footer_landscape(image, 0)
         self.assertEqual(image.size,(1080,1920))
 
     def test_slope_distribution_handles_empty_data(self):

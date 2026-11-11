@@ -23,7 +23,7 @@ class AltitudeCardTests(unittest.TestCase):
         # Assert the production entrypoint actually references the right card.
         import inspect
         source = inspect.getsource(outdoor.render_outdoor_story)
-        self.assertIn("draw_altitude_card(d, footer_right_x, y, footer_right_w, 240, metrics, lang)", source)
+        self.assertIn("_draw_scaled_card(img, draw_altitude_card, right_x, y_cursor", source)
 
     def test_two_column_layout_values_and_labels(self):
         image = Image.new("RGB", (486, 240), "#101F1D")

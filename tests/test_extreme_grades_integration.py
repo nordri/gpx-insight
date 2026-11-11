@@ -36,8 +36,8 @@ class ExtremeGradesIntegrationTests(unittest.TestCase):
                 outdoor.render_outdoor_story({'name': 'Ruta de prueba'}, metrics, chart, output)
             self.assertEqual(len(seen), 1)
             x, y, w, h = seen[0]
-            self.assertEqual((x, y, h), (outdoor.M, 1770, 240))
+            self.assertEqual((x, y, h), (0, 0, 240))  # Painter uses a local off-screen layer
             self.assertGreaterEqual(w, 450)
             with Image.open(output) as img:
                 self.assertEqual(img.size, (outdoor.W, outdoor.H))
-                self.assertGreaterEqual(img.height, 2140)
+                self.assertEqual(img.height, 1920)

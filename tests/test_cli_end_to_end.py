@@ -24,7 +24,7 @@ class CLIEndToEnd(unittest.TestCase):
         self.assertTrue(output.is_file(), 'CLI did not produce PNG')
         with Image.open(output) as img:
             self.assertEqual(img.format, 'PNG')
-            self.assertEqual(img.size, (1080, 2140))
+            self.assertEqual(img.size, (1080, 1920))
             img.verify()
 
     def test_fixture_generates_valid_story(self):

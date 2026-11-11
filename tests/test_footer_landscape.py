@@ -7,7 +7,7 @@ class FooterLandscapeTests(unittest.TestCase):
         image = Image.new('RGB', (W, H), '#14251B')
         footer_landscape(image, 1234)
         self.assertEqual(image.size, (W, H))
-        self.assertNotEqual(image.getpixel((W // 2, H - 110)), (20, 37, 27))
+        self.assertNotEqual(image.getpixel((W // 2, H - 80)), (20, 37, 27))
 
     def test_landscape_is_deterministic(self):
         first = Image.new('RGB', (W, H), '#14251B')
@@ -22,7 +22,7 @@ class FooterLandscapeTests(unittest.TestCase):
         # Landscape has variation across the full height, not a dead bottom band.
         bottom = [image.getpixel((x, H - 3)) for x in range(0, W, 11)]
         self.assertGreater(len(set(bottom)), 1)
-        top = [image.getpixel((x, H - 145)) for x in range(0, W, 11)]
+        top = [image.getpixel((x, H - 90)) for x in range(0, W, 11)]
         self.assertGreater(len(set(top)), 1)
 
     def test_zero_points_is_not_missing(self):

@@ -24,8 +24,13 @@ GREEN = "#B6D49A"
 ORANGE = "#E8A17F"
 BLUE = "#99C8CE"
 NEUTRAL = "#81958D"
-W, H = WIDTH, max(HEIGHT, 2160)  # Footer cards need their own vertical space.
-M = 46
+W, H = 1080, 1920
+M = 40
+GAP = 16
+TOP_MARGIN = 48
+BOTTOM_MARGIN = 49
+ROW_HEIGHTS = (320, 100, 35, 340, 220, 130, 260, 190, 100)
+assert TOP_MARGIN + BOTTOM_MARGIN + sum(ROW_HEIGHTS) + GAP * (len(ROW_HEIGHTS) - 1) == H
 INNER = W - 2 * M
 
 
@@ -295,23 +300,23 @@ SLOPE_UP = ("#E95738", "#F18B35", "#EFB742", "#C7DB69")
 SLOPE_DOWN = ("#9CC4F0", "#73A5DF", "#4C79C4", "#345B9C")
 
 
-def scenic_header(img):
+def scenic_header(img, height=320):
     """Composite an illustrated background with a legibility gradient."""
     asset = ASSET_DIR / "mountain-header.jpg"
     with Image.open(asset) as source:
-        scene = source.convert("RGB").resize((W, 355), Image.Resampling.LANCZOS)
-    overlay = Image.new("RGBA", (W, 355))
+        scene = source.convert("RGB").resize((W, height), Image.Resampling.LANCZOS)
+    overlay = Image.new("RGBA", (W, height))
     opx = overlay.load()
-    for yy in range(355):
+    for yy in range(height):
         for xx in range(W):
             # Darker at left and bottom, keeping the title readable.
-            darkness = int(216 * (1 - xx / W) ** 1.5 + 65 * (yy / 355))
+            darkness = int(216 * (1 - xx / W) ** 1.5 + 65 * (yy / height))
             opx[xx, yy] = (7, 27, 23, min(240, darkness))
     scene = Image.alpha_composite(scene.convert("RGBA"), overlay)
     img.paste(scene.convert("RGB"), (0, 0))
 
 
-def footer_landscape(img, point_count, lang="es", background_path=None):
+def footer_landscape(img, point_count, lang="es", background_path=None, top=None, height=100):
     """Natural continuous mountain landscape; 2x supersampling, no anisotropic scaling.
 
     Fits the available 150 px band below the footer cards. The supplied optional
@@ -321,10 +326,9 @@ def footer_landscape(img, point_count, lang="es", background_path=None):
     from PIL import ImageOps
 
     scale = 2
-    height = 150
     width = W
     sw, sh = width * scale, height * scale
-    top = img.height - height
+    top = img.height - height if top is None else top
     scene = Image.new("RGB", (sw, sh), "#14251B")
     d = ImageDraw.Draw(scene)
     rng = random.Random(67421)
@@ -884,115 +888,132 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
     d._image.paste(layer, (round(x), round(y)), layer)
 
 
-def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
-    labels=_load_i18n(lang)
-    img=Image.new("RGB",(W,H),BG)
-    d=ImageDraw.Draw(img)
-    scenic_header(img)
-    d=ImageDraw.Draw(img)
-    _tiny_icon(d,M,39,"mountain",GREEN,1.15)
-    txt(d,M+51,40,"GPX  /  INSIGHT",21,GREEN,True)
-    date=_route_date_label(metadata,lang)
-    txt(d,M,102,date.upper(),19,MUTED,True)
-    name=metadata.get("name") or _t(labels,"unnamed_route")
-    # Title area is taller than the old renderer, no clipped line 2.
-    title_lines, title_font=_fit_title_lines(d,name,INNER-20,3,51,30)
-    ty=139
-    for ln in title_lines:
-        txt(d,M,ty,ln,title_font.size,TEXT,True)
-        ty+=title_font.size+10
-    # Hero KPI row, no separate outlined cards
-    kpi_palette=[("#1D4D42","#17382F"),("#2B5738","#1A382A"),("#654135","#392D2B"),("#23505A","#17343C")]
-    kpi_w=(INNER-18)/4
-    for i,(top,bottom) in enumerate(kpi_palette):
-        x=M+i*(kpi_w+6)
-        gradient_card(img,(x,355,x+kpi_w,525),top,bottom,24)
-    d=ImageDraw.Draw(img)
-    values=[
-        (_t(labels,"total_distance"),_fmt_km(metrics["distance_km"]),TEXT,"distance"),
-        (_t(labels,"ascent"),"+"+_fmt_m(metrics["elevation_gain_m"]),GREEN,"up"),
-        (_t(labels,"descent"),"-"+_fmt_m(metrics["elevation_loss_m"]),ORANGE,"down"),
-        (_t(labels,"total_time"),_fmt_time(metrics["total_time"]),TEXT,"clock"),
-    ]
-    col=(INNER-18)/4+6
-    for i,(lab,val,c,ico) in enumerate(values):
-        center=M+i*col+kpi_w/2
-        _tiny_icon(d,center-20,365,ico,c,1.0)
-        txt(d,center,415,lab.upper(),19,TEXT,True,anchor="mt")
-        txt(d,center,456,val,35,c,True,anchor="mt")
+def _draw_scaled_card(img, painter, x, y, width, height, native_height, *args):
+    """Preserve existing card internals; fit their native rendering to a layout row."""
+    layer = Image.new("RGB", (int(width), int(native_height)), BG)
+    if painter is draw_times_card:
+        gradient_card(layer, (0, 0, width, native_height), "#244D3A", "#19362D")
+    elif painter is draw_slope_ratios_card:
+        gradient_card(layer, (0, 0, width, native_height), "#20443B", "#152D29")
+    painter(ImageDraw.Draw(layer), 0, 0, int(width), int(native_height), *args)
+    if native_height != height:
+        layer = layer.resize((int(width), int(height)), Image.Resampling.LANCZOS)
+    img.paste(layer, (int(x), int(y)))
 
-    # Display the start and end times provided by the analytics engine.
-    txt(d,M+12,545,f"{_t(labels,'start')}: {_fmt_time(metrics['start_time'])}",25,TEXT,True)
-    txt(d,W-M-12,545,f"{_t(labels,'end')}: {_fmt_time(metrics['end_time'])}",25,TEXT,True,anchor="ra")
-    # Elevation chart: large quiet canvas, original analytical chart preserved
-    gradient_card(img,(M,595,W-M,1012),"#1B3C32","#142A26",26)
-    d=ImageDraw.Draw(img)
-    _tiny_icon(d,M+24,619,"mountain",GREEN,.95)
-    title(d,M+66,617,_t(labels,"elevation_profile"))
-    # Elevation summary badges: same upper-right area, above the chart.
-    badge_y = 609
-    badge_gap = 12
-    badge_width = 174
+
+def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
+    labels = _load_i18n(lang)
+    img = Image.new("RGB", (W, H), BG)
+    y_cursor = TOP_MARGIN
+
+    # Header image bleeds to the top edge; content stays within its budget.
+    scenic_header(img, y_cursor + ROW_HEIGHTS[0])
+    d = ImageDraw.Draw(img)
+    _tiny_icon(d, M, y_cursor + 8, "mountain", GREEN, 1.15)
+    txt(d, M + 51, y_cursor + 9, "GPX  /  INSIGHT", 21, GREEN, True)
+    date = _route_date_label(metadata, lang)
+    txt(d, M, y_cursor + 62, date.upper(), 19, MUTED, True)
+    name = metadata.get("name") or _t(labels, "unnamed_route")
+    title_lines, title_font = _fit_title_lines(d, name, INNER - 20, 3, 51, 30)
+    ty = y_cursor + 99
+    for ln in title_lines:
+        txt(d, M, ty, ln, title_font.size, TEXT, True)
+        ty += title_font.size + 10
+    y_cursor += ROW_HEIGHTS[0] + GAP
+
+    # Four summary tiles: use the full 100 px row.
+    kpi_palette = [("#1D4D42", "#17382F"), ("#2B5738", "#1A382A"),
+                   ("#654135", "#392D2B"), ("#23505A", "#17343C")]
+    kpi_w = (INNER - 18) / 4
+    for i, (top, bottom) in enumerate(kpi_palette):
+        x = M + i * (kpi_w + 6)
+        gradient_card(img, (x, y_cursor, x + kpi_w, y_cursor + ROW_HEIGHTS[1]), top, bottom, 18)
+    d = ImageDraw.Draw(img)
+    values = [
+        (_t(labels, "total_distance"), _fmt_km(metrics["distance_km"]), TEXT, "distance"),
+        (_t(labels, "ascent"), "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up"),
+        (_t(labels, "descent"), "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down"),
+        (_t(labels, "total_time"), _fmt_time(metrics["total_time"]), TEXT, "clock"),
+    ]
+    col = kpi_w + 6
+    for i, (lab, val, color, ico) in enumerate(values):
+        center = M + i * col + kpi_w / 2
+        _tiny_icon(d, center - 15, y_cursor + 5, ico, color, .75)
+        txt(d, center, y_cursor + 41, lab.upper(), 15, TEXT, True, anchor="mt")
+        txt(d, center, y_cursor + 65, val, 27, color, True, anchor="mt")
+    y_cursor += ROW_HEIGHTS[1] + GAP
+
+    # Start/end row.
+    d = ImageDraw.Draw(img)
+    txt(d, M + 12, y_cursor + 4, f"{_t(labels,'start')}: {_fmt_time(metrics['start_time'])}", 25, TEXT, True)
+    txt(d, W - M - 12, y_cursor + 4, f"{_t(labels,'end')}: {_fmt_time(metrics['end_time'])}", 25, TEXT, True, anchor="ra")
+    y_cursor += ROW_HEIGHTS[2] + GAP
+
+    # Elevation chart; preserve the chart data and its aspect ratio.
+    chart_y = y_cursor
+    chart_h = ROW_HEIGHTS[3]
+    gradient_card(img, (M, chart_y, W - M, chart_y + chart_h), "#1B3C32", "#142A26", 26)
+    d = ImageDraw.Draw(img)
+    _tiny_icon(d, M + 24, chart_y + 18, "mountain", GREEN, .95)
+    title(d, M + 66, chart_y + 16, _t(labels, "elevation_profile"))
+    badge_y = chart_y + 8
+    badge_gap, badge_width = 12, 174
     right = W - M - 24
     _elevation_stat_box(d, right - 2 * badge_width - badge_gap, badge_y,
-                        _t(labels, "ascent"),
-                        "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up")
+                        _t(labels, "ascent"), "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up")
     _elevation_stat_box(d, right - badge_width, badge_y,
-                        _t(labels, "descent"),
-                        "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down")
+                        _t(labels, "descent"), "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down")
     with Image.open(chart_path) as chart_src:
-        chart=chart_src.convert("RGBA")
-        chart.thumbnail((INNER-55,315),Image.Resampling.LANCZOS)
-        # Keep aspect ratio; don't stretch a data chart
-        box=Image.new("RGBA",(INNER-48,325),(0,0,0,0))
-        bx=(box.width-chart.width)//2
-        by=(box.height-chart.height)//2
-        box.alpha_composite(chart,(bx,by))
-        img.paste(box,(M+24,675),box)
-    # Secondary data, deliberately not competing with elevation profile
-    y=1030
-    half=(INNER-16)//2
-    gradient_card(img,(M,y,M+half,y+278),"#244D3A","#19362D")
-    gradient_card(img,(M+half+16,y,W-M,y+278),"#20443B","#152D29")
-    d=ImageDraw.Draw(img)
-    time_data=[
-        (_t(labels,"moving_time"),_fmt_time(metrics["moving_time"]),lang),
-        (_t(labels,"stopped"),_fmt_time(metrics["stopped_time"]),lang),
-        (_t(labels,"avg_speed_total"),_fmt_speed(metrics["avg_speed_total"]),lang),
-        (_t(labels,"max_speed"),_fmt_speed(metrics["max_speed"]),lang),
-    ]
-    draw_times_card(d,M,y,half,278,time_data)
-    rx=M+half+16
-    draw_slope_ratios_card(d, rx, y, half, 278, metrics, labels)
-    # Distribution & slope detail, use the existing validated bin data
-    y=1325
-    d=ImageDraw.Draw(img)
-    draw_slope_distribution_card(d, M, y, INNER, 150, metrics, lang)
-    y=1492
-    d=ImageDraw.Draw(img)
-    # Three cards on the same row: climb | flat | descent.
-    gap = 10
-    center_w = 240
-    side_w = (INNER - center_w - 2*gap)//2
-    draw_grade_analysis_card(d, M, y, side_w, 258,
-                             metrics.get("uphill_table"), metrics.get("uphill_distance_km"),
-                             "up", lang)
-    draw_flat_sections_card(d, M+side_w+gap, y, center_w, 258, metrics, lang)
-    draw_grade_analysis_card(d, M+side_w+gap+center_w+gap, y, side_w, 258,
-                             metrics.get("downhill_table"), metrics.get("downhill_distance_km"),
-                             "down", lang)
-    # Footer cards sit below the three-column grade analysis, without overlap.
-    # Keep the analytical values sourced from metrics; never recompute them here.
-    y = 1770
-    footer_gap = 16
-    footer_left_w = (INNER - footer_gap) // 2
-    footer_right_x = M + footer_left_w + footer_gap
-    footer_right_w = INNER - footer_left_w - footer_gap
-    d = ImageDraw.Draw(img)
-    draw_extreme_grades_card(d, M, y, footer_left_w, 240, metrics, lang)
+        chart = chart_src.convert("RGBA")
+        chart.thumbnail((INNER - 55, chart_h - 92), Image.Resampling.LANCZOS)
+        box = Image.new("RGBA", (INNER - 48, chart_h - 88), (0, 0, 0, 0))
+        box.alpha_composite(chart, ((box.width - chart.width) // 2,
+                                    (box.height - chart.height) // 2))
+        img.paste(box, (M + 24, chart_y + 82), box)
+    y_cursor += ROW_HEIGHTS[3] + GAP
 
-    draw_altitude_card(d, footer_right_x, y, footer_right_w, 240, metrics, lang)
-    footer_landscape(img, metrics["point_count"], lang)
-    out=Path(output_path)
-    out.parent.mkdir(parents=True,exist_ok=True)
+    # Two columns. Existing card painters are unchanged.
+    half = (INNER - GAP) // 2
+    time_data = [
+        (_t(labels, "moving_time"), _fmt_time(metrics["moving_time"]), lang),
+        (_t(labels, "stopped"), _fmt_time(metrics["stopped_time"]), lang),
+        (_t(labels, "avg_speed_total"), _fmt_speed(metrics["avg_speed_total"]), lang),
+        (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"]), lang),
+    ]
+    _draw_scaled_card(img, draw_times_card, M, y_cursor, half, ROW_HEIGHTS[4], 278, time_data)
+    rx = M + half + GAP
+    _draw_scaled_card(img, draw_slope_ratios_card, rx, y_cursor, half, ROW_HEIGHTS[4], 278, metrics, labels)
+    y_cursor += ROW_HEIGHTS[4] + GAP
+
+    _draw_scaled_card(img, draw_slope_distribution_card, M, y_cursor, INNER,
+                      ROW_HEIGHTS[5], 150, metrics, lang)
+    y_cursor += ROW_HEIGHTS[5] + GAP
+
+    # Three columns.
+    center_w = 240
+    side_w = (INNER - center_w - 2 * GAP) // 2
+    _draw_scaled_card(img, draw_grade_analysis_card, M, y_cursor, side_w,
+                      ROW_HEIGHTS[6], 258, metrics.get("uphill_table"),
+                      metrics.get("uphill_distance_km"), "up", lang)
+    _draw_scaled_card(img, draw_flat_sections_card, M + side_w + GAP, y_cursor,
+                      center_w, ROW_HEIGHTS[6], 258, metrics, lang)
+    _draw_scaled_card(img, draw_grade_analysis_card, M + side_w + GAP + center_w + GAP,
+                      y_cursor, side_w, ROW_HEIGHTS[6], 258, metrics.get("downhill_table"),
+                      metrics.get("downhill_distance_km"), "down", lang)
+    y_cursor += ROW_HEIGHTS[6] + GAP
+
+    # Bottom analytical cards.
+    left_w = (INNER - GAP) // 2
+    right_x = M + left_w + GAP
+    _draw_scaled_card(img, draw_extreme_grades_card, M, y_cursor, left_w,
+                      ROW_HEIGHTS[7], 240, metrics, lang)
+    _draw_scaled_card(img, draw_altitude_card, right_x, y_cursor, INNER - left_w - GAP,
+                      ROW_HEIGHTS[7], 240, metrics, lang)
+    y_cursor += ROW_HEIGHTS[7] + GAP
+
+    footer_landscape(img, metrics["point_count"], lang, top=y_cursor, height=ROW_HEIGHTS[8] + BOTTOM_MARGIN)
+    y_cursor += ROW_HEIGHTS[8]
+    assert y_cursor + BOTTOM_MARGIN == H
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)
