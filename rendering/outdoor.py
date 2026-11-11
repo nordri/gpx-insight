@@ -27,9 +27,9 @@ NEUTRAL = "#81958D"
 W, H = 1080, 1920
 M = 40
 GAP = 16
-TOP_MARGIN = 48
-BOTTOM_MARGIN = 49
-ROW_HEIGHTS = (320, 100, 35, 340, 220, 130, 260, 190, 100)
+TOP_MARGIN = 0
+BOTTOM_MARGIN = 0
+ROW_HEIGHTS = (220, 100, 35, 462, 230, 130, 280, 200, 135)
 assert TOP_MARGIN + BOTTOM_MARGIN + sum(ROW_HEIGHTS) + GAP * (len(ROW_HEIGHTS) - 1) == H
 INNER = W - 2 * M
 
@@ -300,10 +300,10 @@ SLOPE_UP = ("#E95738", "#F18B35", "#EFB742", "#C7DB69")
 SLOPE_DOWN = ("#9CC4F0", "#73A5DF", "#4C79C4", "#345B9C")
 
 
-def scenic_header(img, height=320):
+def scenic_header(img, height=220):
     """Cover-crop the header photo and shade its lower half for readable text."""
-    if not 300 <= height <= 320:
-        raise ValueError("Header height must be between 300 and 320 px")
+    if not 220 <= height <= 320:
+        raise ValueError("Header height must be between 220 and 320 px")
     asset = ASSET_DIR / "mountain-header.jpg"
     with Image.open(asset) as source:
         scene = ImageOps.fit(source.convert("RGB"), (W, height),
@@ -357,7 +357,7 @@ def _header_title_lines(draw, raw_title, max_width=INNER, size=38):
 def footer_landscape(img, point_count, lang="es", background_path=None, top=None, height=100):
     """Natural continuous mountain landscape; 2x supersampling, no anisotropic scaling.
 
-    Fits the available 150 px band below the footer cards. The supplied optional
+    Fits the allocated bottom band below the footer cards. The supplied optional
     image uses aspect-preserving cover/crop. The generated scene is deterministic.
     """
     import random
@@ -944,7 +944,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     img = Image.new("RGB", (W, H), BG)
     y_cursor = TOP_MARGIN
 
-    # Header photo is cropped to its 320 px band, flush with the top edge.
+    # Header photo occupies 220 px; summary begins exactly one GAP below.
     scenic_header(img, ROW_HEIGHTS[0])
     d = ImageDraw.Draw(img)
     _tiny_icon(d, M, y_cursor + 8, "mountain", GREEN, 1.15)
@@ -953,7 +953,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     txt(d, M, y_cursor + 62, date.upper(), 19, MUTED, True)
     name = metadata.get("name") or _t(labels, "unnamed_route")
     title_lines = _header_title_lines(d, name, INNER, 38)
-    ty = y_cursor + 111
+    ty = y_cursor + 101
     for ln in title_lines:
         txt(d, M, ty, ln, 38, TEXT, True)
         ty += 50
@@ -1049,7 +1049,8 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
                       ROW_HEIGHTS[7], 240, metrics, lang)
     y_cursor += ROW_HEIGHTS[7] + GAP
 
-    footer_landscape(img, metrics["point_count"], lang, top=y_cursor, height=ROW_HEIGHTS[8] + BOTTOM_MARGIN)
+    assert y_cursor == H - ROW_HEIGHTS[8], "Footer must begin at the bottom-anchored band"
+    footer_landscape(img, metrics["point_count"], lang, top=y_cursor, height=ROW_HEIGHTS[8])
     y_cursor += ROW_HEIGHTS[8]
     assert y_cursor + BOTTOM_MARGIN == H
     out = Path(output_path)
