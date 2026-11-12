@@ -1051,10 +1051,10 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
         for i in range(5):
             xx = left + (right-left)*i/4
             d.text((xx, bottom + 7), f"{xmin+(xmax-xmin)*i/4:.1f}",
-                   font=font(14), fill="#B9CDAF", anchor="mt")
-        axis_name = "Distancia (km)" if lang.startswith("es") else "Distance (km)"
-        d.text((w/2, h-15), axis_name, font=font(16),
-               fill="#D1E1C4", anchor="mm")
+                   font=font(18, True), fill="#DDE8D2", anchor="mt")
+        axis_name = "DISTANCIA (km)" if lang.startswith("es") else "DISTANCE (km)"
+        d.text((w/2, h-15), axis_name, font=font(15, True),
+               fill="#DDE8D2", anchor="mm")
 
         def callout(point, value, kind):
             cx, cy = point
