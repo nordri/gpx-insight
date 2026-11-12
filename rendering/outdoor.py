@@ -727,7 +727,7 @@ def draw_times_card(d, x, y, width, height, labels_and_values):
                font=value_font, fill=TIME_VALUE_COLOR, anchor="lt")
 
 
-SLOPE_CARD_BG = "#182A1F"
+SLOPE_CARD_BG = "#112217"
 SLOPE_CARD_TRACK = "#3B523E"
 SLOPE_CARD_UP = "#A3E635"
 SLOPE_CARD_DOWN = "#F87150"
@@ -774,8 +774,11 @@ def _slope_ring(d, cx, cy, percentage, accent, diameter=124):
 
 def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
     """Two symmetric slope ratios; all numerical inputs come from analytics."""
-    d.rounded_rectangle((x, y, x + width, y + height), radius=22,
-                        fill=SLOPE_CARD_BG)
+    # Forest background and subtle 18% white perimeter, matching the times card.
+    forest = (17, 34, 23)
+    border = tuple(round(c * .82 + 255 * .18) for c in forest)
+    d.rounded_rectangle((x, y, x + width - 1, y + height - 1), radius=23,
+                        fill=SLOPE_CARD_BG, outline=border, width=1)
     # Official Lucide 'mountain' outline (24x24 path, scaled by SVG viewBox).
     mountain = ('<g transform="translate(7 8) scale(3.5)" fill="none" '
                 f'stroke="{SLOPE_CARD_CREAM}" stroke-width="1.8" '
@@ -798,7 +801,7 @@ def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
 
     divider_y = y + 222
     d.line([(x + 20, divider_y), (x + width - 20, divider_y)],
-           fill="#3B4B40", width=1)
+           fill=TIME_DIVIDER_COLOR, width=1)
     for cx, value, color, arrow in (
         (centers[0], metrics.get("ascent_per_km"), SLOPE_CARD_UP, "↑"),
         (centers[1], metrics.get("descent_per_km"), SLOPE_CARD_DOWN, "↓"),
@@ -1022,7 +1025,7 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
             xx = left + (right-left)*i/4
             d.text((xx, bottom + 7), f"{xmin+(xmax-xmin)*i/4:.1f}",
                    font=font(14), fill="#B9CDAF", anchor="mt")
-        axis_name = "DISTANCIA (km)" if lang.startswith("es") else "DISTANCE (km)"
+        axis_name = "Distancia (km)" if lang.startswith("es") else "Distance (km)"
         d.text((w/2, h-15), axis_name, font=font(16),
                fill="#D1E1C4", anchor="mm")
 
