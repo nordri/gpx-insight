@@ -12,7 +12,7 @@ class StoryLayoutBudgetTests(unittest.TestCase):
     def test_vertical_budget(self):
         self.assertEqual(outdoor.GAP, 16)
         self.assertEqual(outdoor.ROW_HEIGHTS,
-                         (220, 100, 35, 462, 230, 130, 280, 200, 135))
+                         (220, 100, 35, 462, 230, 150, 260, 200, 135))
         self.assertEqual(outdoor.TOP_MARGIN + outdoor.BOTTOM_MARGIN +
                          sum(outdoor.ROW_HEIGHTS) +
                          outdoor.GAP * (len(outdoor.ROW_HEIGHTS) - 1), 1920)

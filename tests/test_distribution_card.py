@@ -19,12 +19,12 @@ class DistributionCardTests(unittest.TestCase):
         img = Image.new('RGB', (1080, 1920), 'white')
         draw_slope_distribution_card(ImageDraw.Draw(img), 46, 1325, 988, 150, {})
         self.assertEqual(img.size, (1080, 1920))
-        self.assertEqual(img.getpixel((51, 1400)), (20, 37, 27))
+        self.assertEqual(img.getpixel((51, 1400)), (17, 34, 23))
 
     def test_card_renders_without_changing_dimensions(self):
         img = Image.new('RGB',(1080,1920),'white')
         draw_slope_distribution_card(ImageDraw.Draw(img),46,1325,988,150,self.metrics)
         self.assertEqual(img.size,(1080,1920))
-        self.assertEqual(img.getpixel((46+5,1325+75)),(20,37,27))
+        self.assertEqual(img.getpixel((46+5,1325+75)),(17,34,23))
 
 if __name__ == '__main__': unittest.main()

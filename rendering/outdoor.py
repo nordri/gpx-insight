@@ -29,7 +29,7 @@ M = 40
 GAP = 16
 TOP_MARGIN = 0
 BOTTOM_MARGIN = 0
-ROW_HEIGHTS = (220, 100, 35, 462, 230, 130, 280, 200, 135)
+ROW_HEIGHTS = (220, 100, 35, 462, 230, 150, 260, 200, 135)
 assert TOP_MARGIN + BOTTOM_MARGIN + sum(ROW_HEIGHTS) + GAP * (len(ROW_HEIGHTS) - 1) == H
 INNER = W - 2 * M
 
@@ -545,7 +545,8 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
     def text_at(cx, top, content, size, color, bold=False, anchor="mm"):
         hd.text((xy(cx), xy(top)), content, font=_distribution_font(xy(size), bold),
                 fill=color, anchor=anchor)
-    hd.rounded_rectangle((0, 0, xy(w)-1, xy(h)-1), radius=xy(20), fill="#14251B")
+    hd.rounded_rectangle((0, 0, xy(w)-1, xy(h)-1), radius=xy(23),
+                         fill="#112217", outline=(255, 255, 255, 46), width=xy(1))
     # Lucide 'layers' official paths, native 24x24 viewBox.
     icon_svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" '
                 f'viewBox="0 0 24 24" fill="none" stroke="#E6EBD9" '
@@ -572,7 +573,7 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
         return
 
     bins = _distribution_bins(metrics)
-    bar_x, bar_y, bar_w, bar_h = 19, 57, w-38, 32
+    bar_x, bar_y, bar_w, bar_h = 19, 53, w-38, 44
     bar = Image.new("RGBA", (xy(bar_w), xy(bar_h)), "#3B523E")
     bd = ImageDraw.Draw(bar)
     cumulative = 0.
@@ -586,21 +587,21 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
         centers.append(bar_x + (start + end)/(2*S))
     mask = Image.new("L", bar.size, 0)
     ImageDraw.Draw(mask).rounded_rectangle((0,0,bar.width-1,bar.height-1),
-                                           radius=xy(16), fill=255)
+                                           radius=xy(22), fill=255)
     layer.paste(bar, (xy(bar_x), xy(bar_y)), mask)
     for (fraction, label, color, fg), center in zip(bins, centers):
         segment_width = fraction * bar_w
         pct_text = f"{fraction*100:.1f}%"
         # Only draw text where it fits; never let one percentage bleed into another bin.
-        font = _distribution_font(xy(12), True)
+        font = _distribution_font(xy(16), True)
         if segment_width*S >= hd.textlength(pct_text, font=font) + xy(7):
-            text_at(center, bar_y+bar_h/2, pct_text, 12, fg, True)
+            text_at(center, bar_y+bar_h/2, pct_text, 16, "#1C2833" if color == "#F4D03F" else "#FFFFFF", True)
         # Labels remain centered on the exact segment centers; omit when too narrow.
-        label_font = _distribution_font(xy(11))
+        label_font = _distribution_font(xy(13))
         if segment_width*S >= hd.textlength(label, font=label_font) + xy(4):
-            text_at(center, 104, label, 11, "#CFD8CC")
-    text_at(19, 132, "▲  SUBIDA FUERTE", 13, "#F4D03F", True, "lm")
-    text_at(w-19, 132, "BAJADA FUERTE  ▼", 13, "#FA6D4B", True, "rm")
+            text_at(center, 110, label, 13, "#CFD8CC")
+    text_at(19, 137, "▲  SUBIDA FUERTE", 13, "#F4D03F", True, "lm")
+    text_at(w-19, 137, "BAJADA FUERTE  ▼", 13, "#FA6D4B", True, "rm")
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x), round(y)), final)
 
