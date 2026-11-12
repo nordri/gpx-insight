@@ -142,7 +142,8 @@ def _draw_slope_rows(d, x, y, rows, accent):
 
 
 
-ANALYSIS_BG = "#14251B"
+ANALYSIS_BG = "#112217"
+ANALYSIS_BORDER = "#3C4A41"  # white at 18% over #112217
 ANALYSIS_CREAM = "#E6EBD9"
 ANALYSIS_MUTED = "#CFD8CC"
 ANALYSIS_DIVIDER = "#34443A"
@@ -167,7 +168,7 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
         hd.text((sc(px), sc(py)), str(value), font=f(size, weight),
                 fill=color, anchor=anchor)
 
-    hd.rounded_rectangle((0, 0, sc(w)-1, sc(h)-1), radius=sc(22), fill=ANALYSIS_BG)
+    hd.rounded_rectangle((0, 0, sc(w)-1, sc(h)-1), radius=sc(23), fill=ANALYSIS_BG, outline=ANALYSIS_BORDER, width=sc(1))
     is_up = direction == "up"
     accent = ANALYSIS_UP if is_up else ANALYSIS_DOWN
     title_text = ("Análisis subidas" if is_up else "Análisis bajadas") if lang.startswith("es") else ("Climb analysis" if is_up else "Descent analysis")
@@ -203,7 +204,7 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     dist_right = w * (.67 if w < 400 else .60)
     pct_right = w - (13 if w < 400 else w*.16)
     head_size = 10 if w < 400 else 12
-    cell_size = 14 if w < 400 else 16
+    cell_size = 15 if w < 400 else 16
     write(pad, 76, "PENDIENTE" if lang.startswith("es") else "GRADE", head_size, ANALYSIS_MUTED, "semibold")
     write(dist_right, 76, "DISTANCIA" if lang.startswith("es") else "DISTANCE", head_size, ANALYSIS_MUTED, "semibold", "rt")
     write(pct_right, 76, "% RUTA" if lang.startswith("es") else "% ROUTE", head_size, ANALYSIS_MUTED, "semibold", "rt")
@@ -214,10 +215,18 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     palette = palette_up if is_up else palette_down
     row_list = list(rows or [])[:4]
     for i, row in enumerate(row_list):
-        yy = 111 + i*25
+        yy = 112 + i * ((h - 32 - 112) / 3)
         dot_color = row.get("dot_color") or palette[i]
-        hd.ellipse((sc(pad),sc(yy+6),sc(pad+9),sc(yy+15)), fill=dot_color)
-        write(pad+15, yy, row.get("label", ""), cell_size)
+        label = row.get("label", "")
+        # Anchor 'lt' positions the visible top of the glyphs at yy.
+        # Center the accent dot against that glyph box, not a guessed offset.
+        bounds = hd.textbbox((0, 0), str(label), font=f(cell_size), anchor="lt")
+        glyph_height = (bounds[3] - bounds[1]) / S
+        dot_center = yy + glyph_height / 2
+        dot_radius = 4.5
+        hd.ellipse((sc(pad), sc(dot_center-dot_radius),
+                    sc(pad+9), sc(dot_center+dot_radius)), fill=dot_color)
+        write(pad+15, yy, label, cell_size)
         distance = row.get("distance_km")
         percentage = row.get("route_pct")
         dist_label = "N/D" if distance is None else f"{float(distance):.2f} km"
@@ -239,7 +248,21 @@ def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
         return
     layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
     hd = ImageDraw.Draw(layer)
-    hd.rounded_rectangle((0, 0, w*S-1, h*S-1), radius=22*S, fill=ANALYSIS_BG)
+    hd.rounded_rectangle((0, 0, w*S-1, h*S-1), radius=23*S,
+                         fill=ANALYSIS_BG, outline=ANALYSIS_BORDER, width=S)
+    # Low-contrast meadow / level-path watermark, drawn behind all text.
+    # Use restrained colors close to the panel background; no metric data.
+    horizon = "#192D1E"
+    contour = "#1C3524"
+    hd.polygon([(12*S, 214*S), (48*S, 204*S), (83*S, 211*S),
+                (123*S, 199*S), (160*S, 206*S), (205*S, 198*S),
+                ((w-12)*S, 208*S), ((w-12)*S, (h-15)*S),
+                (12*S, (h-15)*S)], fill=horizon)
+    for offset in (0, 12, 24):
+        points = [(16*S, (214+offset)*S), (52*S, (208+offset)*S),
+                  (96*S, (215+offset)*S), (141*S, (209+offset)*S),
+                  (194*S, (213+offset)*S), ((w-16)*S, (208+offset)*S)]
+        hd.line(points, fill=contour, width=S)
     def face(sz, weight="regular"):
         return _time_font(round(sz*S), weight)
     def put(cx, cy, value, sz, color, weight="regular", anchor="mm"):
@@ -268,8 +291,6 @@ def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
     put(w/2, 105, value, 31 if w >= 220 else 26, "#A3E635", "bold")
     put(w/2, 143, percentage, 19, "#FFFFFF", "semibold")
     put(w/2, 173, "Pendiente < 1 %" if lang.startswith("es") else "Grade < 1%", 14, ANALYSIS_MUTED)
-    # Decorative contour, deliberately restrained and not data-bearing.
-    hd.line([(20*S, (h-21)*S), ((w-20)*S, (h-21)*S)], fill="#426047", width=S*2)
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x), round(y)), final)
 
