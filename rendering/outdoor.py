@@ -844,7 +844,7 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
     sw, sh = round(width * scale), round(height * scale)
     card = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     cd = ImageDraw.Draw(card)
-    cd.rounded_rectangle((0, 0, sw - 1, sh - 1), radius=22 * scale, fill="#14251B")
+    cd.rounded_rectangle((0, 0, sw - 1, sh - 1), radius=22 * scale, fill="#112217", outline=(255, 255, 255, 46), width=scale)
     def f(size, bold=False):
         return _time_font(size * scale, "bold" if bold else "regular")
     def center(text, cx, cy, size, color, bold=False):
@@ -861,7 +861,7 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
     bottom = height - 15
     mid_y = (top + bottom) / 2
     mid_x = width / 2
-    divider = (255, 255, 255, 30)
+    divider = (255, 255, 255, 36)
     cd.line((round(mid_x * scale), round(top * scale), round(mid_x * scale), round(bottom * scale)), fill=divider, width=scale)
     cd.line((round(18 * scale), round(mid_y * scale), round((width - 18) * scale), round(mid_y * scale)), fill=divider, width=scale)
     values = [
@@ -878,14 +878,14 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
         else:
             magnitude = abs(float(value))
             value_text = ("-" if negative else "") + f"{magnitude:.1f}%"
-        label_size = 11
-        while label_size > 8 and cd.textlength(label, font=f(label_size, True)) > (width / 2 - 15) * scale:
+        label_size = 14
+        while label_size > 13 and cd.textlength(label, font=f(label_size, True)) > (width / 2 - 15) * scale:
             label_size -= 1
-        center(label, cx, cy - 15, label_size, muted, True)
+        center(label, cx, cy - 18, label_size, muted, True)
         value_size = 29
         while value_size > 19 and cd.textlength(value_text, font=f(value_size, True)) > (width / 2 - 16) * scale:
             value_size -= 1
-        center(value_text, cx, cy + 14, value_size, color, True)
+        center(value_text, cx, cy + 16, value_size, color, True)
     card = card.resize((round(width), round(height)), Image.Resampling.LANCZOS)
     d._image.paste(card, (round(x), round(y)), card)
 
@@ -905,7 +905,7 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
     def f(size, bold=False):
         return _time_font(px(size), "bold" if bold else "regular")
 
-    draw.rounded_rectangle((0, 0, px(w)-1, px(h)-1), radius=px(22), fill="#14251B")
+    draw.rounded_rectangle((0, 0, px(w)-1, px(h)-1), radius=px(22), fill="#112217", outline=(255, 255, 255, 46), width=scale)
     # The same official Lucide 'layers' paths used in the slope distribution card.
     icon_svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
                 'fill="none" stroke="#E6EBD9" stroke-width="1.8" '
@@ -923,17 +923,17 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
     # A centered separator replaces the old horizontal row divider.
     mid = w / 2
     draw.line((px(mid), px(76), px(mid), px(h - 24)),
-              fill=(255, 255, 255, 31), width=scale)
+              fill=(255, 255, 255, 36), width=scale)
     columns = [
         ("Altura inicio" if lang.startswith("es") else "Start altitude",
-         metrics.get("elevation_start_m"), "#D2DFD0", "#64B5F6", w / 4),
+         metrics.get("elevation_start_m"), "#D2DFD0", "#5DADE2", w / 4),
         ("Altura fin" if lang.startswith("es") else "End altitude",
          metrics.get("elevation_end_m"), "#F5B041", "#F5B041", 3 * w / 4),
     ]
     for label, value, dot_color, value_color, cx in columns:
         value_text = "N/D" if value is None else f"{int(round(value)):,} m"
         value_size = 29
-        label_size = 18
+        label_size = 14
         max_text_width = w / 2 - 42
         while value_size > 18 and draw.textlength(value_text, font=f(value_size, True)) > px(max_text_width):
             value_size -= 1
@@ -946,10 +946,15 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
         gap = 12
         group_width = dot_radius * 2 + gap + label_width
         left = cx - group_width / 2
-        draw.ellipse((px(left), px(181-dot_radius), px(left+dot_radius*2), px(181+dot_radius)),
+        label_font = f(label_size, True)
+        label_y = px(181)
+        bbox = draw.textbbox((0, label_y), label, font=label_font, anchor="lm")
+        dot_center_y = (bbox[1] + bbox[3]) / 2
+        draw.ellipse((px(left), round(dot_center_y - px(dot_radius)),
+                      px(left + dot_radius * 2), round(dot_center_y + px(dot_radius))),
                      fill=dot_color)
-        draw.text((px(left+dot_radius*2+gap), px(181)), label,
-                  font=f(label_size, True), fill="#FFFFFF", anchor="lm")
+        draw.text((px(left+dot_radius*2+gap), label_y), label,
+                  font=label_font, fill="#CFD8CC", anchor="lm")
     layer = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(layer, (round(x), round(y)), layer)
 
