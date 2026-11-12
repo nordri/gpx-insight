@@ -632,12 +632,9 @@ def _time_font(size, weight="regular"):
     """Use native-size uncondensed fonts; no horizontal rescaling."""
     from PIL import ImageFont
     candidates = {
-        "bold": ("/usr/share/fonts/opentype/inter/Inter-Bold.otf",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        "semibold": ("/usr/share/fonts/opentype/inter/Inter-SemiBold.otf",
-                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        "regular": ("/usr/share/fonts/opentype/inter/Inter-Regular.otf",
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        "bold": ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",),
+        "semibold": ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",),
+        "regular": ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",),
     }
     for candidate in candidates[weight]:
         if Path(candidate).is_file():
@@ -677,51 +674,57 @@ def _time_label(raw):
 
 
 def draw_times_card(d, x, y, width, height, labels_and_values):
-    """Render a balanced 2x2 card; values come from the existing formatters."""
-    heading="Tiempos y velocidades" if str(labels_and_values[0][2]).startswith("es") else "Times & speeds"
-    _time_card_icon(d,x+22,y+19,"stopwatch",size=32)
-    _time_text(d,(x+65,y+21),heading,24,TIME_VALUE_COLOR,"semibold")
+    """Draw the four metrics at their final pixel size, without stretching text."""
+    heading = ("Tiempos y velocidades" if str(labels_and_values[0][2]).startswith("es")
+               else "Times & speeds")
+    # Match the elevation profile: forest background and 18% white outline.
+    forest = (17, 34, 23)
+    border = tuple(round(c * .82 + 255 * .18) for c in forest)
+    d.rounded_rectangle((x, y, x + width - 1, y + height - 1),
+                        radius=23, fill="#112217", outline=border, width=1)
+    _time_card_icon(d, x + 20, y + 16, "stopwatch", size=28)
+    _time_text(d, (x + 58, y + 18), heading, 20, "#FFFFFF", "bold")
 
-    pad=20
-    top=y+76
-    bottom=y+height-18
-    mid_x=x+width/2
-    mid_y=(top+bottom)/2
-    d.line([(round(mid_x),round(top)),(round(mid_x),round(bottom))],fill=TIME_DIVIDER_COLOR,width=1)
-    d.line([(x+pad,round(mid_y)),(x+width-pad,round(mid_y))],fill=TIME_DIVIDER_COLOR,width=1)
+    pad = 16
+    top = y + 35
+    bottom = y + height - 12
+    mid_x = x + width / 2
+    mid_y = (top + bottom) / 2
+    d.line([(round(mid_x), round(y + 53)), (round(mid_x), round(bottom))],
+           fill=TIME_DIVIDER_COLOR, width=1)
+    d.line([(round(x + pad), round(mid_y)), (round(x + width - pad), round(mid_y))],
+           fill=TIME_DIVIDER_COLOR, width=1)
 
-    col_width=width/2
-    row_height=(bottom-top)/2
-    icon_size=36
-    gap=12
-    for i,(label,value,_) in enumerate(labels_and_values):
-        col=i%2
-        row=i//2
-        left=x+col*col_width
-        center_y=top+(row+.5)*row_height
-        icon_x=left+19
-        # Icon and two-line text block share the same vertical centre.
-        icon_y=center_y-icon_size/2
-        text_x=icon_x+icon_size+gap
-        label_y=center_y-26
-        value_y=center_y+1
-        _time_card_icon(d,icon_x,icon_y,("runner","pause","gauge","gauge_max")[i],size=icon_size)
-        # Use a readable label size while respecting the available half-width.
-        available=(left+col_width-9)-text_x
-        label=_time_label(label)
-        label_size=14
-        face=_time_font(label_size,"semibold")
-        while label_size>11 and d.textlength(label,font=face)>available:
-            label_size-=1
-            face=_time_font(label_size,"semibold")
-        _time_text(d,(text_x,label_y),label,label_size,TIME_LABEL_COLOR,"semibold")
-        value_size=27
-        face=_time_font(value_size,"bold")
-        while value_size>19 and d.textlength(str(value),font=face)>available:
-            value_size-=1
-            face=_time_font(value_size,"bold")
-        _time_text(d,(text_x,value_y),str(value),value_size,TIME_VALUE_COLOR,"bold")
-
+    col_width = width / 2
+    row_height = (bottom - top) / 2
+    icon_size = 30
+    gap = 13
+    for i, (label, value, _) in enumerate(labels_and_values):
+        col, row = i % 2, i // 2
+        left = x + col * col_width
+        center_y = top + (row + .5) * row_height
+        icon_x = left + 13
+        text_x = icon_x + icon_size + gap
+        available = left + col_width - 8 - text_x
+        label = _time_label(label)
+        label_size = 13
+        while label_size > 10 and d.textlength(label, font=_time_font(label_size, "bold")) > available:
+            label_size -= 1
+        value_size = 26
+        while value_size > 18 and d.textlength(str(value), font=_time_font(value_size, "bold")) > available:
+            value_size -= 1
+        label_font = _time_font(label_size, "bold")
+        value_font = _time_font(value_size, "bold")
+        label_h = d.textbbox((0, 0), label, font=label_font, anchor="lt")[3]
+        value_h = d.textbbox((0, 0), str(value), font=value_font, anchor="lt")[3]
+        spacing = 8
+        text_top = center_y - (label_h + spacing + value_h) / 2
+        _time_card_icon(d, icon_x, center_y - icon_size / 2,
+                        ("runner", "pause", "gauge", "gauge_max")[i], size=icon_size)
+        d.text((round(text_x), round(text_top)), label, font=label_font,
+               fill=TIME_LABEL_COLOR, anchor="lt")
+        d.text((round(text_x), round(text_top + label_h + spacing)), str(value),
+               font=value_font, fill=TIME_VALUE_COLOR, anchor="lt")
 
 
 SLOPE_CARD_BG = "#182A1F"
@@ -1019,7 +1022,7 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
             xx = left + (right-left)*i/4
             d.text((xx, bottom + 7), f"{xmin+(xmax-xmin)*i/4:.1f}",
                    font=font(14), fill="#B9CDAF", anchor="mt")
-        axis_name = "Distancia (km)" if lang.startswith("es") else "Distance (km)"
+        axis_name = "DISTANCIA (km)" if lang.startswith("es") else "DISTANCE (km)"
         d.text((w/2, h-15), axis_name, font=font(16),
                fill="#D1E1C4", anchor="mm")
 
@@ -1134,7 +1137,8 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
         (_t(labels, "avg_speed_total"), _fmt_speed(metrics["avg_speed_total"]), lang),
         (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"]), lang),
     ]
-    _draw_scaled_card(img, draw_times_card, M, y_cursor, half, ROW_HEIGHTS[4], 278, time_data)
+    # Draw at native 230 px height: never resize the card anisotropically.
+    draw_times_card(ImageDraw.Draw(img), M, y_cursor, half, ROW_HEIGHTS[4], time_data)
     rx = M + half + GAP
     _draw_scaled_card(img, draw_slope_ratios_card, rx, y_cursor, half, ROW_HEIGHTS[4], 278, metrics, labels)
     y_cursor += ROW_HEIGHTS[4] + GAP
