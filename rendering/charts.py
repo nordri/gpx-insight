@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
@@ -40,7 +42,12 @@ def _adaptive_savgol(values):
 
 # Generate elevation profile image
 
-def generate_elevation_chart(points, theme="forest", lang="en"):
+def generate_elevation_chart(
+    points,
+    theme="forest",
+    lang="en",
+    output_path="output/elevation_profile.png",
+):
     palette = THEME_COLORS.get(theme, THEME_COLORS["forest"])
     is_es = (lang or "").lower().startswith("es")
 
@@ -58,53 +65,54 @@ def generate_elevation_chart(points, theme="forest", lang="en"):
 
     smoothed = _adaptive_savgol(elevations)
 
+    chart_path = Path(output_path)
+    chart_path.parent.mkdir(parents=True, exist_ok=True)
+
     fig, ax = plt.subplots(figsize=(9.2, 3.0), facecolor=(0, 0, 0, 0))
-    ax.set_facecolor((0, 0, 0, 0))
+    try:
+        ax.set_facecolor((0, 0, 0, 0))
 
-    y_floor = float(min(smoothed.min(), elevations.min()) - 20)
-    y_top = float(max(smoothed.max(), elevations.max()) + 20)
+        y_floor = float(min(smoothed.min(), elevations.min()) - 20)
+        y_top = float(max(smoothed.max(), elevations.max()) + 20)
 
-    ax.fill_between(
-        distances,
-        smoothed,
-        y_floor,
-        color=palette["fill"],
-        alpha=0.32,
-    )
-    ax.plot(
-        distances,
-        smoothed,
-        linewidth=2.6,
-        color=palette["line"],
-    )
+        ax.fill_between(
+            distances,
+            smoothed,
+            y_floor,
+            color=palette["fill"],
+            alpha=0.32,
+        )
+        ax.plot(
+            distances,
+            smoothed,
+            linewidth=2.6,
+            color=palette["line"],
+        )
 
-    total_km = float(distances[-1]) if len(distances) > 1 else 0.0
-    tick_step = 2 if total_km >= 8 else 1
-    x_ticks = np.arange(0, total_km + 0.001, tick_step)
+        total_km = float(distances[-1]) if len(distances) > 1 else 0.0
+        tick_step = 2 if total_km >= 8 else 1
+        x_ticks = np.arange(0, total_km + 0.001, tick_step)
 
-    ax.set_xlim(0, max(total_km, 0.1))
-    ax.set_ylim(y_floor, y_top)
-    ax.set_xticks(x_ticks)
-    ax.set_xlabel("Distancia (km)" if is_es else "Distance (km)", color=palette["text"], fontsize=11, labelpad=10)
-    ax.set_ylabel("Elevación (m)" if is_es else "Elevation (m)", color=palette["text"], fontsize=11, labelpad=10)
-    ax.tick_params(axis="x", colors=palette["text"], labelsize=11)
-    ax.tick_params(axis="y", colors=palette["text"], labelsize=10)
-    ax.grid(True, axis="y", color=palette["grid"], alpha=0.5, linewidth=0.8)
-    ax.grid(True, axis="x", color=palette["grid"], alpha=0.2, linewidth=0.6)
+        ax.set_xlim(0, max(total_km, 0.1))
+        ax.set_ylim(y_floor, y_top)
+        ax.set_xticks(x_ticks)
+        ax.set_xlabel("Distancia (km)" if is_es else "Distance (km)", color=palette["text"], fontsize=11, labelpad=10)
+        ax.set_ylabel("Elevación (m)" if is_es else "Elevation (m)", color=palette["text"], fontsize=11, labelpad=10)
+        ax.tick_params(axis="x", colors=palette["text"], labelsize=11)
+        ax.tick_params(axis="y", colors=palette["text"], labelsize=10)
+        ax.grid(True, axis="y", color=palette["grid"], alpha=0.5, linewidth=0.8)
+        ax.grid(True, axis="x", color=palette["grid"], alpha=0.2, linewidth=0.6)
 
-    for side in ["top", "right", "left", "bottom"]:
-        ax.spines[side].set_visible(False)
+        for side in ["top", "right", "left", "bottom"]:
+            ax.spines[side].set_visible(False)
 
-    plt.tight_layout()
+        fig.tight_layout()
+        fig.savefig(
+            chart_path,
+            transparent=True,
+            dpi=200,
+        )
+    finally:
+        plt.close(fig)
 
-    output_path = "output/elevation_profile.png"
-
-    plt.savefig(
-        output_path,
-        transparent=True,
-        dpi=200
-    )
-
-    plt.close()
-
-    return output_path
+    return str(chart_path)

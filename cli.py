@@ -1,8 +1,7 @@
 import argparse
-from parser.gpx_loader import load_gpx
-from analytics.metrics import compute_basic_metrics
-from rendering.charts import generate_elevation_chart
-from rendering.canvas import render_story
+from pathlib import Path
+
+from service import generate_story
 
 
 def main():
@@ -15,24 +14,14 @@ def main():
 
     args = parser.parse_args()
 
-    metadata, points = load_gpx(args.input)
-
-    metrics = compute_basic_metrics(points)
-
-    chart_path = generate_elevation_chart(
-        metrics,
+    story = generate_story(
+        Path(args.input).read_bytes(),
         theme=args.theme,
         lang=args.lang,
     )
-
-    render_story(
-        metadata=metadata,
-        metrics=metrics,
-        chart_path=chart_path,
-        output_path=args.output,
-        theme=args.theme,
-        lang=args.lang
-    )
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(story)
 
     print(f"Story generated: {args.output}")
 

@@ -69,7 +69,32 @@ make analyze GPX=route.gpx OUTPUT=output/my-route.png THEME=forest LANG=es
 | `make check` | Verifies runtime dependencies. | `make check` |
 | `make analyze` | Generates the report from a GPX file. | `make analyze GPX=route.gpx` |
 | `make test` | Runs the unit and integration test suite. | `make test` |
+| `make docker-build` | Builds the AWS Lambda Python 3.12 base image. | `make docker-build DOCKER_IMAGE=gpx-insight:latest` |
 | `make clean` | Removes generated output files. | `make clean` |
+
+### Docker image for AWS Lambda
+
+Build the container image locally with:
+
+```bash
+make docker-build
+```
+
+The image includes the application modules, rendering assets, fonts, and dependencies. It does not declare a Lambda handler or `CMD`; a handler must be added before the image can be run as a Lambda function.
+
+The CLI still defaults to writing `output/story.png`. The reusable service stages its input and intermediate images in a temporary directory, removes them on success or failure, and returns the final PNG as bytes. A future Lambda handler will still need to decide how to receive GPX bytes and return or persist the generated image.
+
+### Reusable Python API
+
+The application pipeline is also available without invoking the CLI:
+
+```python
+from service import generate_story
+
+story_png = generate_story(gpx_bytes, theme="forest", lang="en")
+```
+
+`generate_story` accepts GPX content as bytes and returns PNG bytes. Supported themes are `forest`, `volcanic`, and `alpine`; supported languages are `en` and `es`.
 
 ### Output
 
