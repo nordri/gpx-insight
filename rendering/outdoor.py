@@ -638,7 +638,9 @@ TIME_LABEL_COLOR = "#CFD8CC"
 TIME_VALUE_COLOR = "#FFFFFF"
 TIME_DIVIDER_COLOR = "#3B5045"  # ~12% white over forest green
 
-# Material Icons: directions_run (filled). Lucide: circle-pause, gauge, timer.
+# Font Awesome: person-running (CC BY 4.0).
+# Lucide: circle-pause, gauge, timer.
+# See ATTRIBUTION.txt for third-party icon attribution.
 # Keep paths at their native 24x24 viewBox; no hand-built stick figures.
 TIME_CARD_ICONS = {
     # Font Awesome Free 6.7.2 person-running (CC BY 4.0), Fonticons, Inc.
