@@ -13,11 +13,11 @@ FIXTURE = ROOT / 'test.gpx'
 
 
 class CLIEndToEnd(unittest.TestCase):
-    def _run_cli(self, source: Path, output: Path):
+    def _run_cli(self, source: Path, output: Path, cwd: Path = ROOT):
         return subprocess.run(
             [sys.executable, str(ROOT / 'cli.py'), '--input', str(source),
              '--output', str(output), '--lang', 'es'],
-            cwd=ROOT, text=True, capture_output=True, timeout=90,
+            cwd=cwd, text=True, capture_output=True, timeout=90,
         )
 
     def _assert_png(self, output: Path):
@@ -31,9 +31,11 @@ class CLIEndToEnd(unittest.TestCase):
         self.assertTrue(FIXTURE.exists(), 'test.gpx is required')
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'story.png'
-            result = self._run_cli(FIXTURE, output)
+            result = self._run_cli(FIXTURE, output, cwd=Path(tmp))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.stdout.strip(), f'Story generated: {output}')
             self._assert_png(output)
+            self.assertFalse((Path(tmp) / 'output').exists())
 
     def test_missing_timestamps_generates_valid_story(self):
         self.assertTrue(FIXTURE.exists(), 'test.gpx is required')
