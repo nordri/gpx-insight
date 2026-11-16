@@ -15,12 +15,12 @@ fi
 
 ACTION="${1:-}"
 case "$ACTION" in
-  init|validate|plan)
+  init|validate|plan|lambda-plan)
     ;;
-  apply|destroy)
+  apply|destroy|lambda-apply)
     ;;
   *)
-    echo "Usage: $0 {init|validate|plan|apply|destroy}" >&2
+    echo "Usage: $0 {init|validate|plan|apply|destroy|lambda-plan|lambda-apply}" >&2
     exit 2
     ;;
 esac
@@ -57,9 +57,34 @@ case "$ACTION" in
     exec terraform -chdir="$TERRAFORM_DIR" validate
     ;;
   plan)
+    exec terraform -chdir="$TERRAFORM_DIR" plan -input=false \
+      -target=aws_ecr_repository.gpx_insight
+    ;;
+  lambda-plan)
     exec terraform -chdir="$TERRAFORM_DIR" plan -input=false
     ;;
   apply)
+    exec terraform -chdir="$TERRAFORM_DIR" apply -input=false -auto-approve \
+      -target=aws_ecr_repository.gpx_insight
+    ;;
+  lambda-apply)
+    command -v aws >/dev/null || { echo "AWS CLI is required" >&2; exit 1; }
+    command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
+    curl --silent --show-error --max-time 5 --output /dev/null "$FLOCI_ENDPOINT" || {
+      echo "FloCI is not reachable at $FLOCI_ENDPOINT" >&2
+      exit 1
+    }
+    aws ecr describe-images \
+      --repository-name "$TF_VAR_project_name" \
+      --image-ids imageTag=1.1.0 \
+      --region "$AWS_DEFAULT_REGION" \
+      --endpoint-url "$FLOCI_ENDPOINT" \
+      --no-cli-pager \
+      --query 'imageDetails[0].imageDigest' \
+      --output text >/dev/null || {
+      echo "ECR image tag 1.1.0 is required before deploying Lambda" >&2
+      exit 1
+    }
     exec terraform -chdir="$TERRAFORM_DIR" apply -input=false -auto-approve
     ;;
   destroy)
