@@ -11,7 +11,7 @@ variable "project_name" {
 }
 
 variable "floci_endpoint" {
-  description = "FloCI ECR API endpoint; leave empty to use real AWS endpoints."
+  description = "FloCI AWS service endpoint; leave empty to use real AWS endpoints."
   type        = string
   default     = ""
 }

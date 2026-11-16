@@ -13,5 +13,6 @@ provider "aws" {
     iam            = var.floci_endpoint
     lambda         = var.floci_endpoint
     cloudwatchlogs = var.floci_endpoint
+    apigatewayv2   = var.floci_endpoint
   }
 }

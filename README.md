@@ -109,7 +109,7 @@ FloCI's ECR control-plane API uses the configured local endpoint (default `http:
 
 The Lambda emulator delegates image pulls to Docker. We confirmed from the first invocation's FloCI logs that Docker attempted HTTPS against the AWS-shaped ECR URI and failed because the registry serves HTTP. For FloCI only, Terraform therefore adapts the URI derived from the ECR outputs to `127.0.0.1:<FLOCI_PORT>/<account>/<region>/<repository>@<digest>`, a loopback path-style registry reference Docker can pull over HTTP. It retains the ECR digest and changes neither global Docker configuration nor AWS-real image URIs (`floci_endpoint` empty). The raw AWS-shaped URI failed at image pull; the path-style adapter is required by this local emulator.
 
-After publishing the image, deploy and invoke Lambda directly (no API Gateway is created):
+After publishing the image, deploy and invoke Lambda directly if you want to test the handler without API Gateway:
 
 ```bash
 make floci-lambda-apply
@@ -120,7 +120,32 @@ The invocation uses `test.gpx` as an HTTP API v2 `POST /v1/generate` event and v
 
 Terraform manages ECR, its Lambda execution role and scoped CloudWatch Logs policy, the 14-day log group, and the Lambda function in one state. Run `make floci-ecr-destroy` to remove those FloCI resources and the pushed ECR image, then optionally `make floci-stop`. ECR-only apply/plan remain targeted to the ECR repository so the original image-publication stage does not attempt to deploy Lambda before the image exists.
 
-FloCI emulates these services locally and is not a substitute for validating IAM, ECR policies, or registry behavior in AWS. The OCI registry is exposed over HTTP on the local endpoint; the local path-style mapping is only for Docker push, not the Lambda image URI. The provider endpoint is configurable; leave `floci_endpoint` empty when intentionally using appropriately configured real AWS credentials. The Lambda deployment and invocation scripts are deliberately restricted to loopback endpoints and dummy credentials, avoiding accidental real AWS calls.
+### HTTP API v2 in FloCI
+
+The local architecture is `curl → HTTP API v2 → Lambda → PNG`. After the ECR image and Lambda are deployed, create the unauthenticated API:
+
+```bash
+make floci-api-apply
+make floci-api-test
+```
+
+The API has one route, `POST /v1/generate`, and an auto-deployed `$default` stage. `api_endpoint` and `api_invoke_url` Terraform outputs retain the AWS-style endpoint reported by the provider. FloCI's administration endpoint (`http://127.0.0.1:4566`) is not the public invoke URL; its local listener uses `http://127.0.0.1:4566/_aws/execute-api/<api-id>/$default/v1/generate`. The test script gets the API ID and route URL from Terraform, then adapts the host/path for that loopback listener.
+
+To send raw GPX bytes and save the binary PNG:
+
+```bash
+curl --silent --show-error \
+  --header 'Content-Type: application/gpx+xml' \
+  --data-binary @test.gpx \
+  --output output/route.png \
+  'http://127.0.0.1:4566/_aws/execute-api/<api-id>/$default/v1/generate'
+```
+
+The optional query parameters are `theme=forest|volcanic|alpine` and `lang=en|es`. Successful responses are HTTP 200 with `Content-Type: image/png`; the API integration decodes the Lambda's Base64 proxy response and returns raw PNG bytes (1080 × 1920). Handler errors remain JSON: invalid GPX is 422, unsupported content type is 415, invalid theme/language is 400, and an empty body is a 400. FloCI's empty-body event omits `body`, so the handler reports `INVALID_REQUEST` rather than `EMPTY_BODY`. Because the API declares only the POST route and has no `$default` catch-all, GET and unknown paths are rejected by FloCI before Lambda; both were observed as HTTP 404 JSON. The local test script verifies these behaviors and the binary response.
+
+The API uses no CORS, custom domain, API key, request-body logging, or extra routes. Lambda invocation permission is scoped to the API's POST route. To clean up all resources in the shared Terraform state (API, Lambda, IAM, log group, and ECR), run `make floci-ecr-destroy`, then optionally `make floci-stop`.
+
+FloCI's HTTP API binary path and local `/_aws/execute-api/` listener are emulator-specific; AWS real deployments use the provider-reported `https://<api-id>.execute-api.<region>.amazonaws.com/v1/generate` URL. The OCI registry is exposed over local HTTP, so the existing path-style adapters are only used by the local ECR push and Lambda image pull; AWS-real ECR image URIs remain unchanged when `floci_endpoint` is empty. FloCI is not a substitute for validating API Gateway, IAM, ECR, or registry behavior in AWS. The Lambda deployment, invocation, and API scripts are restricted to loopback endpoints and dummy credentials.
 
 ### Reusable Python API
 
