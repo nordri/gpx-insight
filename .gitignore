@@ -21,6 +21,14 @@ output/
 # Local tooling
 .serena/
 
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+infrastructure/floci/.env
+
 # OS / Editors
 .DS_Store
 .idea/

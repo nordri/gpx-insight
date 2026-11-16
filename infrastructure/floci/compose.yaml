@@ -1,0 +1,8 @@
+services:
+  floci:
+    image: ${FLOCI_IMAGE:-floci/floci:latest}
+    ports:
+      - "127.0.0.1:${FLOCI_PORT:-4566}:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
