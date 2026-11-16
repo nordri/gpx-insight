@@ -157,7 +157,7 @@ from service import generate_story
 story_png = generate_story(gpx_bytes, theme="forest", lang="en")
 ```
 
-`generate_story` accepts GPX content as bytes and returns PNG bytes. Supported themes are `forest`, `volcanic`, and `alpine`; supported languages are `en` and `es`.
+`generate_story` accepts GPX content as bytes and returns PNG bytes. Supported themes are `forest`, `volcanic`, and `alpine`; supported languages are `en` and `es`. Spanish (`es`) is the default in the Python API, CLI, Lambda handler, and both renderers. Pass `lang="en"` (or `--lang en` / `?lang=en`) to render the complete infographic in English. All visible labels are centralized in `i18n/es.json` and `i18n/en.json`, exposed through `i18n.TRANSLATIONS`.
 
 ### Output
 

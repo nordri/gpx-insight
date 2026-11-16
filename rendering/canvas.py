@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+
+from i18n import DEFAULT_LANG, TRANSLATIONS
 
 
 WIDTH = 1080
@@ -12,101 +13,7 @@ HEIGHT = 1920
 ICON_SIZE = 24
 ICON_GAP = 8
 
-I18N_DIR = Path(__file__).resolve().parent.parent / "i18n"
 ICONS_DIR = Path(__file__).resolve().parent / "icons"
-
-FALLBACK_I18N = {
-    "en": {
-        "unnamed_route": "Unnamed Route",
-        "date_prefix": "",
-        "distance": "Distance",
-        "ascent": "Ascent",
-        "descent": "Descent",
-        "time": "Time",
-        "avg_speed": "Avg speed",
-        "start": "Start",
-        "end": "End",
-        "elevation_profile": "Elevation profile",
-        "times_and_speeds": "Times & speeds",
-        "slope_ratios": "Slope ratios",
-        "total_time": "Total time",
-        "moving_time": "Moving",
-        "stopped": "Stopped",
-        "avg_speed_total": "Avg speed total",
-        "avg_speed_moving": "Avg speed moving",
-        "max_speed": "Max speed",
-        "uphill_ratio": "Uphill ratio",
-        "downhill_ratio": "Downhill ratio",
-        "ascent_per_km": "Ascent+/km",
-        "descent_per_km": "Descent-/km",
-        "uphill_analysis": "Uphill analysis",
-        "flat_sections": "Flat sections",
-        "downhill_analysis": "Downhill analysis",
-        "up_total": "TOTAL UPHILL",
-        "down_total": "TOTAL DOWNHILL",
-        "flat_of_route": "of route",
-        "flat_hint": "Grades < 1%",
-        "extreme_slopes": "Extreme slopes",
-        "general_data": "General data",
-        "max_up_grade": "Max uphill grade",
-        "max_down_grade": "Max downhill grade",
-        "avg_up_grade": "Avg uphill grade",
-        "avg_down_grade": "Avg downhill grade",
-        "total_distance": "Total distance",
-        "elevation_gain": "Elevation +",
-        "elevation_loss": "Elevation -",
-        "max_alt": "Max altitude",
-        "min_alt": "Min altitude",
-        "start_end_alt": "Start / End",
-        "footer": "Technical route analysis",
-        "gps_points": "GPS points",
-    },
-    "es": {
-        "unnamed_route": "Ruta sin nombre",
-        "date_prefix": "",
-        "distance": "Distancia",
-        "ascent": "Ascenso",
-        "descent": "Descenso",
-        "time": "Tiempo",
-        "avg_speed": "Vel. media",
-        "start": "Inicio",
-        "end": "Fin",
-        "elevation_profile": "Perfil de elevación",
-        "times_and_speeds": "Tiempos y velocidades",
-        "slope_ratios": "Ratios de pendiente",
-        "total_time": "Tiempo total",
-        "moving_time": "En movimiento",
-        "stopped": "Parado",
-        "avg_speed_total": "Vel. media total",
-        "avg_speed_moving": "Vel. media mov.",
-        "max_speed": "Vel. máxima",
-        "uphill_ratio": "Ratio subida",
-        "downhill_ratio": "Ratio bajada",
-        "ascent_per_km": "Desnivel+/km",
-        "descent_per_km": "Desnivel-/km",
-        "uphill_analysis": "Análisis subidas",
-        "flat_sections": "Tramos llanos",
-        "downhill_analysis": "Análisis bajadas",
-        "up_total": "TOTAL SUBIDAS",
-        "down_total": "TOTAL BAJADAS",
-        "flat_of_route": "de ruta",
-        "flat_hint": "Pendientes < 1%",
-        "extreme_slopes": "Pendientes extremas",
-        "general_data": "Datos generales",
-        "max_up_grade": "Pend. máx. subida",
-        "max_down_grade": "Pend. máx. bajada",
-        "avg_up_grade": "Pend. media subida",
-        "avg_down_grade": "Pend. media bajada",
-        "total_distance": "Distancia total",
-        "elevation_gain": "Desnivel +",
-        "elevation_loss": "Desnivel -",
-        "max_alt": "Altura máxima",
-        "min_alt": "Altura mínima",
-        "start_end_alt": "Inicio / Fin",
-        "footer": "Análisis técnico de ruta",
-        "gps_points": "puntos GPS",
-    },
-}
 
 
 THEMES = {
@@ -200,100 +107,62 @@ def _panel(
     draw.rounded_rectangle(rect, radius=radius, fill=fill, outline=border, width=border_w)
 
 
-def _fmt_km(v: float) -> str:
-    return f"{v:.1f} km"
+def _fmt_km(v: float, labels: dict | None = None) -> str:
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
+    return f"{v:.1f} {labels['unit_km']}"
 
 
-def _fmt_speed(v: float | None) -> str:
-    return "N/D" if v is None else f"{v:.1f} km/h"
+def _fmt_speed(v: float | None, labels: dict | None = None) -> str:
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
+    return labels["not_available"] if v is None else f"{v:.1f} {labels['unit_kmh']}"
 
 
-def _fmt_time(v: str | None) -> str:
-    return "N/D" if v is None else v
+def _fmt_time(v: str | None, labels: dict | None = None) -> str:
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
+    return labels["not_available"] if v is None else v
 
 
-def _fmt_m(v: float) -> str:
-    return f"{int(round(v))} m"
+def _fmt_m(v: float, labels: dict | None = None) -> str:
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
+    return f"{int(round(v))} {labels['unit_m']}"
 
 
 def _load_i18n(lang: str) -> dict:
     code = "es" if (lang or "").lower().startswith("es") else "en"
-    merged = dict(FALLBACK_I18N["en"])
-    merged.update(FALLBACK_I18N.get(code, {}))
-
-    for c in ("en", code):
-        path = I18N_DIR / f"{c}.json"
-        if not path.exists() or path.stat().st_size == 0:
-            continue
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                merged.update({k: str(v) for k, v in payload.items()})
-        except (OSError, json.JSONDecodeError):
-            continue
-
-    return merged
+    return TRANSLATIONS[code]
 
 
 def _t(labels: dict, key: str) -> str:
-    return labels.get(key, FALLBACK_I18N["en"].get(key, key))
+    return labels[key]
 
 
 def _route_date_label(metadata, lang: str) -> str:
-    t = metadata.get("time")
-    if not isinstance(t, datetime):
+    route_time = metadata.get("time")
+    if not isinstance(route_time, datetime):
         return ""
-    code = "es" if (lang or "").lower().startswith("es") else "en"
-    if code == "es":
-        months = [
-            "enero",
-            "febrero",
-            "marzo",
-            "abril",
-            "mayo",
-            "junio",
-            "julio",
-            "agosto",
-            "septiembre",
-            "octubre",
-            "noviembre",
-            "diciembre",
-        ]
-        weekdays = [
-            "lunes",
-            "martes",
-            "miercoles",
-            "jueves",
-            "viernes",
-            "sabado",
-            "domingo",
-        ]
-        return f"{weekdays[t.weekday()].capitalize()}, {t.day} de {months[t.month - 1]} de {t.year}"
-
-    weekdays = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-    ]
-    months = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ]
-    return f"{weekdays[t.weekday()]}, {t.day:02d} {months[t.month - 1]} {t.year}"
+    labels = _load_i18n(lang)
+    weekdays = (
+        "monday", "tuesday", "wednesday", "thursday",
+        "friday", "saturday", "sunday",
+    )
+    months = (
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+    )
+    weekday = _t(labels, f"weekday_{weekdays[route_time.weekday()]}")
+    month = _t(labels, f"month_{months[route_time.month - 1]}")
+    if lang.lower().startswith("es"):
+        weekday = weekday.capitalize()
+    return _t(labels, "date_format").format(
+        weekday=weekday,
+        day=route_time.day,
+        month=month,
+        year=route_time.year,
+    )
 
 
 def _text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont):
@@ -424,6 +293,7 @@ def _draw_slope_table(
     dot_colors: list[str],
     text_color: str,
     muted_color: str,
+    labels: dict,
 ):
     inner_left = rect[0] + 12
     inner_right = rect[2] - 12
@@ -437,9 +307,9 @@ def _draw_slope_table(
     col_dist_x = inner_left + int((inner_right - inner_left) * 0.40)
     col_pct_x = inner_left + int((inner_right - inner_left) * 0.74)
 
-    draw.text((col_grade_x, header_y), "PENDIENTE", fill=muted_color, font=head_font)
-    draw.text((col_dist_x, header_y), "DISTANCIA", fill=muted_color, font=head_font)
-    draw.text((col_pct_x, header_y), "% RUTA", fill=muted_color, font=head_font)
+    draw.text((col_grade_x, header_y), _t(labels, "col_grade"), fill=muted_color, font=head_font)
+    draw.text((col_dist_x, header_y), _t(labels, "col_distance"), fill=muted_color, font=head_font)
+    draw.text((col_pct_x, header_y), _t(labels, "col_pct"), fill=muted_color, font=head_font)
     draw.line((inner_left, header_y + 18, inner_right, header_y + 18), fill="#2b4e3a", width=1)
 
     row_start_y = header_y + 24
@@ -450,7 +320,12 @@ def _draw_slope_table(
         draw.ellipse((inner_left, ry + 8, inner_left + 10, ry + 18), fill=dot)
 
         draw.text((col_grade_x + 18, ry), str(row.get("label", "")), fill=text_color, font=row_font)
-        draw.text((col_dist_x, ry), f"{float(row.get('distance_km', 0.0)):.2f} km", fill=text_color, font=row_font)
+        draw.text(
+            (col_dist_x, ry),
+            f"{float(row.get('distance_km', 0.0)):.2f} {_t(labels, 'unit_km')}",
+            fill=text_color,
+            font=row_font,
+        )
         draw.text((col_pct_x, ry), f"{float(row.get('route_pct', 0.0)):.1f}%", fill=text_color, font=row_font)
 
     fit_total_font = _fit_font_for_width(
@@ -490,9 +365,9 @@ def _draw_ratio_gauge(
 
 
 def _split_title(text: str, max_len: int = 30):
-    words = (text or "Unnamed Route").strip().split()
+    words = str(text or "").strip().split()
     if not words:
-        return ["Unnamed Route"]
+        return []
 
     lines = []
     current = words[0]
@@ -519,7 +394,9 @@ def _fit_title_lines(
     min_size: int = 34,
 ):
     """Fit a title by measured pixel width, preserving whole words where possible."""
-    words = (text or "Unnamed Route").strip().split() or ["Unnamed", "Route"]
+    words = str(text or "").strip().split()
+    if not words:
+        return [""], _font(min_size, bold=True)
 
     def wrap(font):
         lines = []
@@ -566,7 +443,7 @@ def render_story(
     chart_path,
     output_path,
     theme="forest",
-    lang="en"
+    lang=DEFAULT_LANG,
 ):
     if theme == "forest":
         from rendering.outdoor import render_outdoor_story
@@ -610,7 +487,7 @@ def render_story(
 
     title_lines, title_font = _fit_title_lines(
         draw,
-        metadata.get("name", _t(labels, "unnamed_route")),
+        metadata.get("name") or _t(labels, "unnamed_route"),
         max_width=content_w - 52,
         max_lines=2,
         start_size=72,
@@ -623,11 +500,11 @@ def render_story(
     metrics_top = y + 254
     card_w = int((content_w - 48) / 5)
     top_metrics = [
-        ("total_distance", _t(labels, "total_distance"), _fmt_km(metrics["distance_km"]), colors["text"]),
-        ("ascent", _t(labels, "ascent"), f"+{_fmt_m(metrics['elevation_gain_m'])}", colors["up"]),
-        ("descent", _t(labels, "descent"), f"-{_fmt_m(metrics['elevation_loss_m'])}", colors["down"]),
-        ("total_time", _t(labels, "total_time"), _fmt_time(metrics["total_time"]), colors["text"]),
-        ("speed", _t(labels, "avg_speed"), _fmt_speed(metrics["avg_speed_total"]), colors["text"]),
+        ("total_distance", _t(labels, "total_distance"), _fmt_km(metrics["distance_km"], labels), colors["text"]),
+        ("ascent", _t(labels, "ascent"), f"+{_fmt_m(metrics['elevation_gain_m'], labels)}", colors["up"]),
+        ("descent", _t(labels, "descent"), f"-{_fmt_m(metrics['elevation_loss_m'], labels)}", colors["down"]),
+        ("total_time", _t(labels, "total_time"), _fmt_time(metrics["total_time"], labels), colors["text"]),
+        ("speed", _t(labels, "avg_speed"), _fmt_speed(metrics["avg_speed_total"], labels), colors["text"]),
     ]
     for i, (icon_key, label, value, value_color) in enumerate(top_metrics):
         x = margin + 16 + i * (card_w + 8)
@@ -658,7 +535,7 @@ def render_story(
         draw,
         img,
         icons["start"],
-        f"{_t(labels, 'start')} {_fmt_time(metrics['start_time'])}",
+        f"{_t(labels, 'start')} {_fmt_time(metrics['start_time'], labels)}",
         margin + 28,
         y + 380,
         colors["text"],
@@ -672,7 +549,7 @@ def render_story(
         draw,
         img,
         icons["finish"],
-        f"{_t(labels, 'end')} {_fmt_time(metrics['end_time'])}",
+        f"{_t(labels, 'end')} {_fmt_time(metrics['end_time'], labels)}",
         margin + 520,
         y + 380,
         colors["text"],
@@ -717,7 +594,7 @@ def render_story(
         draw,
         img,
         icons["positive_progression"],
-        f"ASC +{_fmt_m(metrics['elevation_gain_m'])}",
+        f"{_t(labels, 'elevation_gain_short')} +{_fmt_m(metrics['elevation_gain_m'], labels)}",
         margin + 648,
         y + 38,
         colors["up"],
@@ -739,7 +616,7 @@ def render_story(
         draw,
         img,
         icons["negative_progression"],
-        f"DES -{_fmt_m(metrics['elevation_loss_m'])}",
+        f"{_t(labels, 'elevation_loss_short')} -{_fmt_m(metrics['elevation_loss_m'], labels)}",
         margin + 816,
         y + 38,
         colors["down"],
@@ -764,7 +641,7 @@ def render_story(
         draw,
         img,
         icons["speed"],
-        _t(labels, 'times_and_speeds').upper(),
+        _t(labels, "times_speeds").upper(),
         left_rect[0] + 18,
         y + 14,
         colors["text"],
@@ -788,12 +665,12 @@ def render_story(
     )
 
     time_cells = [
-        (_t(labels, "total_time"), _fmt_time(metrics["total_time"])),
-        (_t(labels, "moving_time"), _fmt_time(metrics["moving_time"])),
-        (_t(labels, "stopped"), _fmt_time(metrics["stopped_time"])),
-        (_t(labels, "avg_speed_total"), _fmt_speed(metrics["avg_speed_total"])),
-        (_t(labels, "avg_speed_moving"), _fmt_speed(metrics["avg_speed_moving"])),
-        (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"])),
+        (_t(labels, "total_time"), _fmt_time(metrics["total_time"], labels)),
+        (_t(labels, "moving"), _fmt_time(metrics["moving_time"], labels)),
+        (_t(labels, "stopped"), _fmt_time(metrics["stopped_time"], labels)),
+        (_t(labels, "avg_speed"), _fmt_speed(metrics["avg_speed_total"], labels)),
+        (_t(labels, "avg_speed_moving"), _fmt_speed(metrics["avg_speed_moving"], labels)),
+        (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"], labels)),
     ]
     cell_w = int((left_w - 36) / 3)
     for i, (lbl, val) in enumerate(time_cells):
@@ -881,7 +758,7 @@ def render_story(
         value_y = rect[1] + 30
         draw.text((rect[0] + (rect[2] - rect[0] - value_w) / 2, value_y), value_text, fill=color, font=fit_value_font)
 
-        unit_text = "m/km"
+        unit_text = _t(labels, "unit_m_per_km")
         unit_w, _ = _text_size(draw, unit_text, metric_unit_font)
         draw.text((rect[0] + (rect[2] - rect[0] - unit_w) / 2, value_y + value_h + 7), unit_text, fill=color, font=metric_unit_font)
 
@@ -908,7 +785,7 @@ def render_story(
         draw,
         img,
         icons["ascent_analysis"],
-        _t(labels, 'uphill_analysis').upper(),
+        _t(labels, "climb_analysis").upper(),
         up_rect[0] + 16,
         y + 14,
         colors["text"],
@@ -934,7 +811,7 @@ def render_story(
         draw,
         img,
         icons["descent_analysis"],
-        _t(labels, 'downhill_analysis').upper(),
+        _t(labels, "descent_analysis").upper(),
         down_rect[0] + 16,
         y + 14,
         colors["text"],
@@ -944,7 +821,10 @@ def render_story(
         bold=True,
     )
 
-    up_total_text = f"{_t(labels, 'up_total')}: {metrics['uphill_distance_km']:.2f} km"
+    up_total_text = (
+        f"{_t(labels, 'uphill_total')}: {metrics['uphill_distance_km']:.2f} "
+        f"{_t(labels, 'unit_km')}"
+    )
     _draw_slope_table(
         draw,
         up_rect,
@@ -955,6 +835,7 @@ def render_story(
         dot_colors=["#ff3b30", "#ff6d00", "#ff9f0a", "#9acb22"],
         text_color=colors["text"],
         muted_color=colors["muted"],
+        labels=labels,
     )
 
     flat_image = Path(__file__).resolve().parent / "images" / "flat_track.png"
@@ -965,14 +846,14 @@ def render_story(
         flat_icon_x = flat_center_x - int(flat_icon.width / 2)
         img.paste(flat_icon, (flat_icon_x, y + 202), flat_icon)
 
-    flat_distance_text = f"{metrics['flat_distance_km']:.2f} km"
+    flat_distance_text = f"{metrics['flat_distance_km']:.2f} {_t(labels, 'unit_km')}"
     flat_distance_w, _ = _text_size(draw, flat_distance_text, n_font)
     draw.text((flat_center_x - flat_distance_w / 2, y + 100), flat_distance_text, fill=colors["cold"], font=n_font)
 
     flat_ratio_text = f"({metrics['flat_ratio_pct']:.1f}% {_t(labels, 'flat_of_route')})"
     flat_ratio_w, _ = _text_size(draw, flat_ratio_text, m_font)
     draw.text((flat_center_x - flat_ratio_w / 2, y + 168), flat_ratio_text, fill=colors["text"], font=m_font)
-    flat_hint = _t(labels, "flat_hint")
+    flat_hint = _t(labels, "flat_subtitle")
     flat_hint_font = _fit_font_for_width(
         draw,
         flat_hint,
@@ -984,7 +865,10 @@ def render_story(
     flat_hint_w, _ = _text_size(draw, flat_hint, flat_hint_font)
     draw.text((flat_center_x - flat_hint_w / 2, y + 296), flat_hint, fill=colors["muted"], font=flat_hint_font)
 
-    down_total_text = f"{_t(labels, 'down_total')}: {metrics['downhill_distance_km']:.2f} km"
+    down_total_text = (
+        f"{_t(labels, 'downhill_total')}: {metrics['downhill_distance_km']:.2f} "
+        f"{_t(labels, 'unit_km')}"
+    )
     _draw_slope_table(
         draw,
         down_rect,
@@ -995,6 +879,7 @@ def render_story(
         dot_colors=["#9acb22", "#ff9f0a", "#2b7bff", "#1f4ed8"],
         text_color=colors["text"],
         muted_color=colors["muted"],
+        labels=labels,
     )
 
     y += triple_h + 8
@@ -1003,7 +888,7 @@ def render_story(
     distribution_rect = (margin, y, margin + content_w, y + distribution_h)
     _panel(draw, distribution_rect, fill=colors["panel"], border=colors["border"], radius=18)
 
-    distribution_title = "DISTRIBUCION DE DESNIVELES"
+    distribution_title = _t(labels, "slope_distribution").upper()
     _draw_icon_title(
         draw,
         img,
@@ -1036,7 +921,7 @@ def render_story(
         for row in downhill_rows
     ]
     flat_part = {
-        "label": "< 1%",
+        "label": _t(labels, "flat_bin_label"),
         "pct": max(0.0, float(metrics.get("flat_ratio_pct", 0.0))),
     }
 
@@ -1123,15 +1008,15 @@ def render_story(
 
     subtitle_font = _fit_font_for_width(
         draw,
-        "SUBIDA FUERTE",
+        _t(labels, "steep_climb"),
         max_width=260,
         start_size=18,
         min_size=12,
         bold=True,
     )
-    draw.text((bar_x, y + 104), "SUBIDA FUERTE", fill="#facc15", font=subtitle_font)
+    draw.text((bar_x, y + 104), _t(labels, "steep_climb"), fill="#facc15", font=subtitle_font)
 
-    right_subtitle = "BAJADA FUERTE"
+    right_subtitle = _t(labels, "steep_descent")
     right_subtitle_font = _fit_font_for_width(
         draw,
         right_subtitle,
@@ -1157,7 +1042,7 @@ def render_story(
         draw,
         img,
         icons["extreme"],
-        _t(labels, 'extreme_slopes').upper(),
+        _t(labels, "extreme_grades").upper(),
         ext_rect[0] + 16,
         y + 14,
         colors["text"],
@@ -1170,7 +1055,7 @@ def render_story(
         draw,
         img,
         icons["general"],
-        "PUNTOS DE INICIO Y FIN",
+        _t(labels, "start_end_points").upper(),
         gen_rect[0] + 16,
         y + 14,
         colors["text"],
@@ -1191,28 +1076,28 @@ def render_story(
     tiles = [
         {
             "rect": (grid_left, grid_top, grid_left + cell_w, grid_top + cell_h),
-            "label": _t(labels, 'max_up_grade').upper(),
+            "label": _t(labels, "max_uphill").upper(),
             "value": f"{metrics['max_up_grade_pct']:.1f}%",
             "color": colors["up"],
             "spark": True,
         },
         {
             "rect": (grid_left + cell_w + gap, grid_top, grid_right, grid_top + cell_h),
-            "label": _t(labels, 'max_down_grade').upper(),
+            "label": _t(labels, "max_downhill").upper(),
             "value": f"{metrics['max_down_grade_pct']:.1f}%",
             "color": colors["down"],
             "spark": True,
         },
         {
             "rect": (grid_left, grid_top + cell_h + gap, grid_left + cell_w, grid_bottom),
-            "label": _t(labels, 'avg_up_grade').upper(),
+            "label": _t(labels, "avg_uphill").upper(),
             "value": f"{metrics['avg_up_grade_pct']:.1f}%",
             "color": colors["accent"],
             "spark": False,
         },
         {
             "rect": (grid_left + cell_w + gap, grid_top + cell_h + gap, grid_right, grid_bottom),
-            "label": _t(labels, 'avg_down_grade').upper(),
+            "label": _t(labels, "avg_downhill").upper(),
             "value": f"{metrics['avg_down_grade_pct']:.1f}%",
             "color": colors["down"],
             "spark": False,
@@ -1253,8 +1138,8 @@ def render_story(
             draw.line(spark_points, fill=tile["color"], width=2)
 
     point_rows = [
-        ("Altura inicio", _fmt_m(metrics['elevation_start_m']), "#38bdf8"),
-        ("Altura fin", _fmt_m(metrics['elevation_end_m']), "#f59e0b"),
+        (_t(labels, "start_altitude"), _fmt_m(metrics['elevation_start_m'], labels), "#38bdf8"),
+        (_t(labels, "end_altitude"), _fmt_m(metrics['elevation_end_m'], labels), "#f59e0b"),
     ]
 
     row_label_font = _font(24, bold=False)
@@ -1273,7 +1158,7 @@ def render_story(
     draw.line((gen_rect[0] + 20, row_y0 + 55, gen_rect[2] - 20, row_y0 + 55), fill="#294437", width=1)
 
     y += bottom_h + 8
-    footer = f"{_t(labels, 'footer')} - {metrics['point_count']} {_t(labels, 'gps_points')}"
+    footer = _t(labels, "footer_text").format(points=metrics["point_count"])
     draw.text((margin + 16, y), footer, fill=colors["muted"], font=s_font)
 
     output_dir = Path(output_path).parent

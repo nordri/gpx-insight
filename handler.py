@@ -7,6 +7,7 @@ from collections.abc import Mapping
 
 from gpxpy.gpx import GPXException
 
+from i18n import DEFAULT_LANG
 from service import SUPPORTED_LANGUAGES, SUPPORTED_THEMES, generate_story
 
 
@@ -89,7 +90,7 @@ def lambda_handler(event, context):
     if not isinstance(query_parameters, Mapping):
         return _error_response(400, "INVALID_REQUEST", "The request is malformed.")
     theme = query_parameters.get("theme", "forest")
-    lang = query_parameters.get("lang", "en")
+    lang = query_parameters.get("lang", DEFAULT_LANG)
     if (
         not isinstance(theme, str)
         or theme not in SUPPORTED_THEMES

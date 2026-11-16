@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 from gpxpy.gpx import GPXXMLSyntaxException
 from PIL import Image
@@ -40,6 +41,22 @@ class StoryServiceTests(unittest.TestCase):
             image.verify()
         self.assertEqual(self._temporary_service_directories(), before)
 
+    def test_explicit_english_generates_a_1080x1920_png(self):
+        story = generate_story(self.gpx_content, lang="en")
+
+        self.assertTrue(story.startswith(b"\x89PNG\r\n\x1a\n"))
+        with Image.open(BytesIO(story)) as image:
+            self.assertEqual(image.size, (1080, 1920))
+            image.verify()
+
+    def test_english_alternative_theme_generates_a_png(self):
+        story = generate_story(self.gpx_content, theme="alpine", lang="en")
+
+        self.assertTrue(story.startswith(b"\x89PNG\r\n\x1a\n"))
+        with Image.open(BytesIO(story)) as image:
+            self.assertEqual(image.size, (1080, 1920))
+            image.verify()
+
     def test_empty_corrupt_and_pointless_gpx_are_rejected_and_cleaned(self):
         cases = (
             (b"", ValueError),
@@ -62,6 +79,21 @@ class StoryServiceTests(unittest.TestCase):
     def test_non_bytes_gpx_content_is_rejected(self):
         with self.assertRaisesRegex(TypeError, "gpx_content must be bytes"):
             generate_story("not bytes")
+
+    def test_default_language_is_passed_to_chart_and_renderer(self):
+        with (
+            patch("service.load_gpx", return_value=({}, [])),
+            patch("service.compute_basic_metrics", return_value={}),
+            patch("service.generate_elevation_chart", return_value="chart.png") as chart,
+            patch(
+                "service.render_story",
+                side_effect=lambda **kwargs: Path(kwargs["output_path"]).write_bytes(b"png"),
+            ) as renderer,
+        ):
+            self.assertEqual(generate_story(b"<gpx/>"), b"png")
+
+        self.assertEqual(chart.call_args.kwargs["lang"], "es")
+        self.assertEqual(renderer.call_args.kwargs["lang"], "es")
 
 
 if __name__ == "__main__":

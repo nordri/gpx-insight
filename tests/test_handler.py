@@ -82,7 +82,7 @@ class LambdaHandlerTests(unittest.TestCase):
         with patch("handler.generate_story", return_value=self.png) as generate:
             response = lambda_handler(event, None)
 
-        generate.assert_called_once_with(FIXTURE, theme="forest", lang="en")
+        generate.assert_called_once_with(FIXTURE, theme="forest", lang="es")
         self.assert_valid_png_response(response)
 
     def test_method_not_allowed_returns_json(self):

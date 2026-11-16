@@ -14,6 +14,11 @@ class OutdoorRenderTests(unittest.TestCase):
             render_story({}, {}, 'chart.png', 'output.png', theme='forest', lang='es')
             renderer.assert_called_once_with({}, {}, 'chart.png', 'output.png', lang='es')
 
+    def test_default_language_is_spanish(self):
+        with patch('rendering.outdoor.render_outdoor_story') as renderer:
+            render_story({}, {}, 'chart.png', 'output.png')
+            renderer.assert_called_once_with({}, {}, 'chart.png', 'output.png', lang='es')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -10,7 +10,8 @@ class SlopeRatiosCardTests(unittest.TestCase):
                    'ascent_per_km': 74.7, 'descent_per_km': 74.0}
         original = dict(metrics)
         labels = {'slope_ratios': 'Ratios de pendiente',
-                  'uphill_ratio': 'Ratio subida', 'downhill_ratio': 'Ratio bajada'}
+                  'uphill_ratio': 'Ratio subida', 'downhill_ratio': 'Ratio bajada',
+                  'unit_m_per_km': 'm/km'}
         draw_slope_ratios_card(ImageDraw.Draw(image), 20, 20, 500, 278, metrics, labels)
         self.assertEqual(metrics, original)
         self.assertNotEqual(image.getpixel((145, 110)), image.getpixel((20, 20)))

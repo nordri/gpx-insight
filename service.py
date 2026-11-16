@@ -2,19 +2,20 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from analytics.metrics import compute_basic_metrics
+from i18n import DEFAULT_LANG, TRANSLATIONS
 from parser.gpx_loader import load_gpx
-from rendering.canvas import FALLBACK_I18N, THEMES, render_story
+from rendering.canvas import THEMES, render_story
 from rendering.charts import THEME_COLORS, generate_elevation_chart
 
 
 SUPPORTED_THEMES = frozenset(THEMES).intersection(THEME_COLORS)
-SUPPORTED_LANGUAGES = frozenset(FALLBACK_I18N)
+SUPPORTED_LANGUAGES = frozenset(TRANSLATIONS)
 
 
 def generate_story(
     gpx_content: bytes,
     theme: str = "forest",
-    lang: str = "en",
+    lang: str = DEFAULT_LANG,
 ) -> bytes:
     if not isinstance(gpx_content, bytes):
         raise TypeError("gpx_content must be bytes")

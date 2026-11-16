@@ -9,6 +9,7 @@ from pathlib import Path
 import math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 
+from i18n import DEFAULT_LANG, TRANSLATIONS
 from rendering.canvas import (
     WIDTH, HEIGHT, _font, _fit_title_lines, _fmt_km, _fmt_m,
     _fmt_speed, _fmt_time, _load_i18n, _route_date_label, _t,
@@ -56,14 +57,18 @@ def title(d, x, y, name, sub=None):
         txt(d, x, y + 40, sub, 18, MUTED)
 
 
-def _f(value, digits=1, suffix=""):
+def _f(value, digits=1, suffix="", labels=None):
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
     if value is None:
-        return "N/D"
+        return labels["not_available"]
     return f"{value:.{digits}f}{suffix}"
 
 
-def _grade(v):
-    return "N/D" if v is None else f"{v:.1f}%"
+def _grade(v, labels=None):
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
+    return labels["not_available"] if v is None else f"{v:.1f}%"
 
 
 def _pct(v):
@@ -127,17 +132,17 @@ def _row_dividers(d, x, y, w, n):
         line(d, [(xx, y), (xx, y+92)], LINE, 2)
 
 
-def _draw_slope_rows(d, x, y, rows, accent):
-    labels = ("PENDIENTE", "DISTANCIA", "% RUTA")
-    txt(d,x,y,labels[0],14,MUTED,True)
-    txt(d,x+152,y,labels[1],14,MUTED,True)
-    txt(d,x+295,y,labels[2],14,MUTED,True)
+def _draw_slope_rows(d, x, y, rows, accent, lang=DEFAULT_LANG):
+    labels = _load_i18n(lang)
+    txt(d, x, y, labels["col_grade"], 14, MUTED, True)
+    txt(d, x + 152, y, labels["col_distance"], 14, MUTED, True)
+    txt(d, x + 295, y, labels["col_pct"], 14, MUTED, True)
     line(d,[(x,y+30),(x+372,y+30)])
     for idx,r in enumerate((rows or [])[:4]):
         yy=y+46+idx*38
         d.ellipse((x,yy+8,x+9,yy+17),fill=accent)
         txt(d,x+19,yy,str(r.get('label','')),19,TEXT)
-        txt(d,x+152,yy,f"{float(r.get('distance_km',0)):.2f} km",19,TEXT)
+        txt(d, x + 152, yy, f"{float(r.get('distance_km', 0)):.2f} {labels['unit_km']}", 19, TEXT)
         txt(d,x+295,yy,f"{float(r.get('route_pct',0)):.1f}%",19,TEXT)
 
 
@@ -152,7 +157,7 @@ ANALYSIS_DOWN = "#F87150"
 
 
 def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
-                             direction="up", lang="es"):
+                             direction="up", lang=DEFAULT_LANG):
     """Render one four-row grade analysis card at 2x, without altering metrics."""
     from io import BytesIO
     import cairosvg
@@ -160,6 +165,7 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     w, h = int(round(width)), int(round(height))
     if w <= 0 or h <= 0:
         return
+    labels = _load_i18n(lang)
     layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
     hd = ImageDraw.Draw(layer)
     def sc(v): return int(round(v*S))
@@ -171,7 +177,7 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     hd.rounded_rectangle((0, 0, sc(w)-1, sc(h)-1), radius=sc(23), fill=ANALYSIS_BG, outline=ANALYSIS_BORDER, width=sc(1))
     is_up = direction == "up"
     accent = ANALYSIS_UP if is_up else ANALYSIS_DOWN
-    title_text = ("Análisis subidas" if is_up else "Análisis bajadas") if lang.startswith("es") else ("Climb analysis" if is_up else "Descent analysis")
+    title_text = labels["climb_analysis"] if is_up else labels["descent_analysis"]
     # Official Lucide trending-up / trending-down paths; no handmade arrows.
     path = ('<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>' if is_up
             else '<path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/>')
@@ -185,7 +191,11 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     layer.alpha_composite(icon, (sc(18), sc(17)))
     title_size = 19 if w < 400 else 21
     # Badge remains within the card even for long localized headings.
-    badge_value = "N/D" if distance_km is None else f"{float(distance_km):.2f} km"
+    badge_value = (
+        labels["not_available"]
+        if distance_km is None
+        else f"{float(distance_km):.2f} {labels['unit_km']}"
+    )
     badge_size = 13 if w < 400 else 15
     badge_width = max(70 if w < 400 else 84, hd.textlength(badge_value, font=f(badge_size, "bold"))/S+18)
     badge_left = w - 18 - badge_width
@@ -205,9 +215,9 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
     pct_right = w - (13 if w < 400 else w*.16)
     head_size = 10 if w < 400 else 12
     cell_size = 15 if w < 400 else 16
-    write(pad, 76, "PENDIENTE" if lang.startswith("es") else "GRADE", head_size, ANALYSIS_MUTED, "semibold")
-    write(dist_right, 76, "DISTANCIA" if lang.startswith("es") else "DISTANCE", head_size, ANALYSIS_MUTED, "semibold", "rt")
-    write(pct_right, 76, "% RUTA" if lang.startswith("es") else "% ROUTE", head_size, ANALYSIS_MUTED, "semibold", "rt")
+    write(pad, 76, labels["col_grade"], head_size, ANALYSIS_MUTED, "semibold")
+    write(dist_right, 76, labels["col_distance"], head_size, ANALYSIS_MUTED, "semibold", "rt")
+    write(pct_right, 76, labels["col_pct"], head_size, ANALYSIS_MUTED, "semibold", "rt")
     hd.line((sc(pad),sc(100),sc(w-pad),sc(100)), fill=ANALYSIS_DIVIDER, width=sc(.5))
     # Each row has the same baseline spacing and an individual bin accent.
     palette_up = ("#F4D03F", "#D4D65B", "#9BCF67", "#6CA87D")
@@ -229,16 +239,20 @@ def draw_grade_analysis_card(d, x, y, width, height, rows, distance_km,
         write(pad+15, yy, label, cell_size)
         distance = row.get("distance_km")
         percentage = row.get("route_pct")
-        dist_label = "N/D" if distance is None else f"{float(distance):.2f} km"
-        pct_label = "N/D" if percentage is None else f"{float(percentage):.1f}%"
+        dist_label = (
+            labels["not_available"]
+            if distance is None
+            else f"{float(distance):.2f} {labels['unit_km']}"
+        )
+        pct_label = labels["not_available"] if percentage is None else f"{float(percentage):.1f}%"
         write(dist_right, yy, dist_label, cell_size, anchor="rt")
         write(pct_right, yy, pct_label, cell_size, anchor="rt")
     if not row_list:
-        write(w/2, 155, "Sin datos de pendiente" if lang.startswith("es") else "No grade data", 15, ANALYSIS_MUTED, anchor="mm")
+        write(w / 2, 155, labels["no_slope_data"], 15, ANALYSIS_MUTED, anchor="mm")
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x),round(y)), final)
 
-def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
+def draw_flat_sections_card(d, x, y, width, height, metrics, lang=DEFAULT_LANG):
     """Center column of the uphill / flat / downhill triptych; no metric inference."""
     from io import BytesIO
     import cairosvg
@@ -246,6 +260,7 @@ def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
     w, h = round(width), round(height)
     if w <= 0 or h <= 0:
         return
+    labels = _load_i18n(lang)
     layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
     hd = ImageDraw.Draw(layer)
     hd.rounded_rectangle((0, 0, w*S-1, h*S-1), radius=23*S,
@@ -278,7 +293,7 @@ def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
     raw = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=size*2, output_height=size*2)
     icon = Image.open(BytesIO(raw)).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
     layer.alpha_composite(icon, (14*S, 18*S))
-    heading = "TRAMOS LLANOS" if lang.startswith("es") else "FLAT SECTIONS"
+    heading = labels["flat_sections"]
     heading_size = 16
     while heading_size > 12 and hd.textlength(heading, font=face(heading_size,"bold")) > (w-53)*S:
         heading_size -= 1
@@ -286,16 +301,21 @@ def draw_flat_sections_card(d, x, y, width, height, metrics, lang="es"):
 
     distance = metrics.get("flat_distance_km")
     ratio = metrics.get("flat_ratio_pct")
-    value = "N/D" if distance is None else f"{float(distance):.2f} km"
-    percentage = "N/D" if ratio is None else f"({float(ratio):.1f}%)"
+    value = (
+        labels["not_available"]
+        if distance is None
+        else f"{float(distance):.2f} {labels['unit_km']}"
+    )
+    percentage = labels["not_available"] if ratio is None else f"({float(ratio):.1f}%)"
     put(w/2, 105, value, 31 if w >= 220 else 26, "#A3E635", "bold")
     put(w/2, 143, percentage, 19, "#FFFFFF", "semibold")
-    put(w/2, 173, "Pendiente < 1 %" if lang.startswith("es") else "Grade < 1%", 14, ANALYSIS_MUTED)
+    put(w / 2, 173, labels["flat_subtitle"], 14, ANALYSIS_MUTED)
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x), round(y)), final)
 
 
-def _distribution(d, x, y, width, metrics):
+def _distribution(d, x, y, width, metrics, lang=DEFAULT_LANG):
+    labels = _load_i18n(lang)
     ups = list(metrics.get("uphill_table") or [])
     downs = list(metrics.get("downhill_table") or [])
     parts = [(_pct(r.get("route_pct")), GREEN) for r in ups]
@@ -310,9 +330,9 @@ def _distribution(d, x, y, width, metrics):
         if seg_w>0:
             d.rectangle((int(cursor),y,int(cursor+seg_w+0.5),y+25),fill=c)
         cursor+=seg_w
-    txt(d,x,y+40,"SUBIDA",17,GREEN,True)
-    txt(d,x+width/2,y+40,"LLANO",17,MUTED,True,anchor="mt")
-    txt(d,x+width,y+40,"BAJADA",17,ORANGE,True,anchor="ra")
+    txt(d, x, y + 40, labels["climb"], 17, GREEN, True)
+    txt(d, x + width / 2, y + 40, labels["flat"], 17, MUTED, True, anchor="mt")
+    txt(d, x + width, y + 40, labels["downhill"], 17, ORANGE, True, anchor="ra")
 
 
 
@@ -375,7 +395,7 @@ def _header_title_lines(draw, raw_title, max_width=INNER, size=38):
     return lines[:2]
 
 
-def footer_landscape(img, point_count, lang="es", background_path=None, top=None, height=100):
+def footer_landscape(img, point_count, lang=DEFAULT_LANG, background_path=None, top=None, height=100):
     """Natural continuous mountain landscape; 2x supersampling, no anisotropic scaling.
 
     Fits the allocated bottom band below the footer cards. The supplied optional
@@ -485,9 +505,7 @@ def footer_landscape(img, point_count, lang="es", background_path=None, top=None
         vd.line((x,0,x,int(sh*.43)),fill=(8,23,16,a))
     scene=Image.alpha_composite(scene.convert("RGBA"),veil)
     d=ImageDraw.Draw(scene)
-    label="Análisis técnico de ruta" if lang=="es" else "Technical route analysis"
-    suffix="puntos GPS" if lang=="es" else "GPS points"
-    caption=f"{label} · {point_count} {suffix}"
+    caption = _load_i18n(lang)["footer_text"].format(points=point_count)
     fonts=["/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
            "/usr/share/fonts/truetype/liberation2/LiberationSans-Italic.ttf"]
     font_path=next((f for f in fonts if Path(f).is_file()),None)
@@ -513,11 +531,13 @@ def gradient_card(img, box, top, bottom, radius=23):
     img.paste(gradient,(x0,y0),mask)
 
 
-def ring(d,cx,cy,r,value,color):
+def ring(d, cx, cy, r, value, color, labels=None):
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
     d.arc((cx-r,cy-r,cx+r,cy+r),0,359,fill="#45665B",width=12)
     if value is not None:
         d.arc((cx-r,cy-r,cx+r,cy+r),-90,-90+max(0,min(100,value))*3.6,fill=color,width=12)
-    txt(d,cx,cy-15,_grade(value),29,TEXT,True,anchor="mt")
+    txt(d, cx, cy - 15, _grade(value, labels), 29, TEXT, True, anchor="mt")
 
 
 # Slope distribution uses the nine validated analytics bins in their original order.
@@ -529,10 +549,11 @@ DISTRIBUTION_FG = ("#FFFFFF", "#FFFFFF", "#14251B", "#14251B",
                    "#FFFFFF", "#14251B", "#FFFFFF", "#FFFFFF", "#FFFFFF")
 
 
-def _distribution_bins(metrics):
+def _distribution_bins(metrics, lang=DEFAULT_LANG):
     ups = list(metrics.get("uphill_table") or [])[:4]
     downs = list(metrics.get("downhill_table") or [])[:4]
-    rows = ups + [{"route_pct": metrics.get("flat_ratio_pct"), "label": "< 1%"}] + downs
+    labels = _load_i18n(lang)
+    rows = ups + [{"route_pct": metrics.get("flat_ratio_pct"), "label": labels["flat_bin_label"]}] + downs
     if len(ups) != 4 or len(downs) != 4:
         raise ValueError("Slope distribution requires four uphill and four downhill bins")
     values = [max(0., float(r.get("route_pct") or 0.)) for r in rows]
@@ -554,12 +575,13 @@ def _distribution_font(size, bold=False):
     return _font(size, bold=bold)
 
 
-def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
+def draw_slope_distribution_card(d, x, y, width, height, metrics, lang=DEFAULT_LANG):
     """Render at 2x, downsample once, and composite into the original canvas."""
     from io import BytesIO
     import cairosvg
     S = 2
     w, h = round(width), round(height)
+    labels = _load_i18n(lang)
     layer = Image.new("RGBA", (w*S, h*S), (0, 0, 0, 0))
     hd = ImageDraw.Draw(layer)
     def xy(v): return round(v*S)
@@ -578,7 +600,7 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
     icon = Image.open(BytesIO(cairosvg.svg2png(bytestring=icon_svg.encode(),
                  output_width=xy(25), output_height=xy(25)))).convert("RGBA")
     layer.alpha_composite(icon, (xy(19), xy(13)))
-    heading = "Distribución de pendientes" if lang.startswith("es") else "Slope distribution"
+    heading = labels["slope_distribution"]
     text_at(54, 25, heading, 19, "#FFFFFF", True, "lm")
 
     # An absent distribution is unknown, not nine measured zero-percent bins.
@@ -587,13 +609,13 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
                         and len(metrics.get("downhill_table") or []) >= 4
                         and metrics.get("flat_ratio_pct") is not None)
     if not has_distribution:
-        message = "Sin datos de pendiente" if lang.startswith("es") else "No slope data"
+        message = labels["no_slope_data"]
         text_at(w / 2, 95, message, 15, "#CFD8CC", anchor="mm")
         final = layer.resize((w, h), Image.Resampling.LANCZOS)
         d._image.paste(final, (round(x), round(y)), final)
         return
 
-    bins = _distribution_bins(metrics)
+    bins = _distribution_bins(metrics, lang)
     bar_x, bar_y, bar_w, bar_h = 19, 53, w-38, 44
     bar = Image.new("RGBA", (xy(bar_w), xy(bar_h)), "#3B523E")
     bd = ImageDraw.Draw(bar)
@@ -621,15 +643,19 @@ def draw_slope_distribution_card(d, x, y, width, height, metrics, lang="es"):
         label_font = _distribution_font(xy(13))
         if segment_width*S >= hd.textlength(label, font=label_font) + xy(4):
             text_at(center, 110, label, 13, "#CFD8CC")
-    text_at(19, 137, "▲  SUBIDA FUERTE", 13, "#F4D03F", True, "lm")
-    text_at(w-19, 137, "BAJADA FUERTE  ▼", 13, "#FA6D4B", True, "rm")
+    text_at(
+        19, 137, f"▲  {labels['steep_climb']}", 13, "#F4D03F", True, "lm"
+    )
+    text_at(
+        w - 19, 137, f"{labels['steep_descent']}  ▼", 13, "#FA6D4B", True, "rm"
+    )
     final = layer.resize((w, h), Image.Resampling.LANCZOS)
     d._image.paste(final, (round(x), round(y)), final)
 
 
-def slope_distribution(d, x, y, width, metrics):
+def slope_distribution(d, x, y, width, metrics, lang=DEFAULT_LANG):
     """Legacy compatibility wrapper; prefer draw_slope_distribution_card."""
-    draw_slope_distribution_card(d, x, y, width, 150, metrics)
+    draw_slope_distribution_card(d, x, y, width, 150, metrics, lang=lang)
 
 
 # Tiempos y velocidades: one visual system, independent of analytics.
@@ -692,15 +718,13 @@ def _time_text(d, xy, value, size, color, weight="regular", spacing=0):
 def _time_label(raw):
     """Normalize abbreviations, not accents or the metrics themselves."""
     import unicodedata
-    label = unicodedata.normalize("NFC", str(raw)).upper()
-    # Protect the conventional low period even if a source label uses a middle dot.
-    return label.replace("VEL˙", "VEL.").replace("VEL·", "VEL.")
+    return unicodedata.normalize("NFC", str(raw)).upper()
 
 
-def draw_times_card(d, x, y, width, height, labels_and_values):
+def draw_times_card(d, x, y, width, height, labels_and_values, lang=DEFAULT_LANG):
     """Draw the four metrics at their final pixel size, without stretching text."""
-    heading = ("Tiempos y velocidades" if str(labels_and_values[0][2]).startswith("es")
-               else "Times & speeds")
+    labels = _load_i18n(lang)
+    heading = labels["times_speeds"]
     # Match the elevation profile: forest background and 18% white outline.
     forest = (17, 34, 23)
     border = tuple(round(c * .82 + 255 * .18) for c in forest)
@@ -723,7 +747,7 @@ def draw_times_card(d, x, y, width, height, labels_and_values):
     row_height = (bottom - top) / 2
     icon_size = 30
     gap = 13
-    for i, (label, value, _) in enumerate(labels_and_values):
+    for i, (label, value) in enumerate(labels_and_values):
         col, row = i % 2, i // 2
         left = x + col * col_width
         center_y = top + (row + .5) * row_height
@@ -771,8 +795,10 @@ def _slope_svg(d, x, y, size, content):
     d._image.paste(icon, (round(x), round(y)), icon)
 
 
-def _slope_ring(d, cx, cy, percentage, accent, diameter=124):
+def _slope_ring(d, cx, cy, percentage, accent, labels=None, diameter=124):
     """SVG-native circles with mathematically exact dash length and round caps."""
+    if labels is None:
+        labels = TRANSLATIONS[DEFAULT_LANG]
     radius = 38
     circumference = 2 * math.pi * radius
     progress = max(0.0, min(100.0, float(percentage or 0)))
@@ -790,7 +816,7 @@ def _slope_ring(d, cx, cy, percentage, accent, diameter=124):
                      f'stroke-dashoffset="{(circumference * (1 - progress / 100)):.9f}" '
                      f'transform="rotate(-90 50 50)"/>')
     _slope_svg(d, cx - diameter / 2, cy - diameter / 2, diameter, base)
-    value = _grade(percentage)
+    value = _grade(percentage, labels)
     size = 21 if len(value) <= 5 else 18
     d.text((round(cx), round(cy)), value, font=_time_font(size, "bold"),
            fill="#FFFFFF", anchor="mm")
@@ -819,7 +845,7 @@ def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
         (centers[0], metrics.get("uphill_ratio_pct"), SLOPE_CARD_UP, "uphill_ratio"),
         (centers[1], metrics.get("downhill_ratio_pct"), SLOPE_CARD_DOWN, "downhill_ratio"),
     ):
-        _slope_ring(d, cx, ring_y, value, color)
+        _slope_ring(d, cx, ring_y, value, color, labels)
         d.text((round(cx), y + 201), _t(labels, key).upper(),
                font=_time_font(14, "semibold"), fill="#CFD8CC", anchor="mt")
 
@@ -830,18 +856,21 @@ def draw_slope_ratios_card(d, x, y, width, height, metrics, labels):
         (centers[0], metrics.get("ascent_per_km"), SLOPE_CARD_UP, "↑"),
         (centers[1], metrics.get("descent_per_km"), SLOPE_CARD_DOWN, "↓"),
     ):
-        label = f"{arrow} {_f(abs(value) if value is not None else None, 1, ' m/km')}"
+        label = (
+            f"{arrow} {_f(abs(value) if value is not None else None, 1, labels['unit_m_per_km'], labels)}"
+        )
         size = 19
         while size > 14 and d.textlength(label, font=_time_font(size, "semibold")) > width / 2 - 14:
             size -= 1
         d.text((round(cx), y + 240), label, font=_time_font(size, "semibold"),
                fill=color, anchor="mt")
 
-def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
+def draw_extreme_grades_card(d, x, y, width, height, metrics, lang=DEFAULT_LANG):
     """Footer left: four grade statistics, drawn at 2x with no font stretching."""
     from io import BytesIO
     import cairosvg
 
+    labels = _load_i18n(lang)
     scale = 2
     sw, sh = round(width * scale), round(height * scale)
     card = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
@@ -857,7 +886,7 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
     png = cairosvg.svg2png(bytestring=icon_svg.encode("utf-8"), output_width=64, output_height=64)
     icon = Image.open(BytesIO(png)).convert("RGBA")
     card.alpha_composite(icon, (19 * scale, 15 * scale))
-    heading = "Pendientes extremas" if lang.startswith("es") else "Extreme grades"
+    heading = labels["extreme_grades"]
     cd.text((58 * scale, 20 * scale), heading, font=f(19, True), fill="#FFFFFF")
     top = 69
     bottom = height - 15
@@ -867,16 +896,16 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
     cd.line((round(mid_x * scale), round(top * scale), round(mid_x * scale), round(bottom * scale)), fill=divider, width=scale)
     cd.line((round(18 * scale), round(mid_y * scale), round((width - 18) * scale), round(mid_y * scale)), fill=divider, width=scale)
     values = [
-        ("PEND. MÁX. SUBIDA", metrics.get("max_up_grade_pct"), lime, False),
-        ("PEND. MÁX. BAJADA", metrics.get("max_down_grade_pct"), coral, False),
-        ("PEND. MEDIA SUBIDA", metrics.get("avg_up_grade_pct"), lime, False),
-        ("PEND. MEDIA BAJADA", metrics.get("avg_down_grade_pct"), coral, True),
+        (labels["max_uphill"], metrics.get("max_up_grade_pct"), lime, False),
+        (labels["max_downhill"], metrics.get("max_down_grade_pct"), coral, False),
+        (labels["avg_uphill"], metrics.get("avg_up_grade_pct"), lime, False),
+        (labels["avg_downhill"], metrics.get("avg_down_grade_pct"), coral, True),
     ]
     centers = [(width * .25, (top + mid_y) / 2), (width * .75, (top + mid_y) / 2),
                (width * .25, (mid_y + bottom) / 2), (width * .75, (mid_y + bottom) / 2)]
     for (label, value, color, negative), (cx, cy) in zip(values, centers):
         if value is None:
-            value_text = "N/D"
+            value_text = labels["not_available"]
         else:
             magnitude = abs(float(value))
             value_text = ("-" if negative else "") + f"{magnitude:.1f}%"
@@ -893,11 +922,12 @@ def draw_extreme_grades_card(d, x, y, width, height, metrics, lang="es"):
 
 
 
-def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
+def draw_altitude_card(d, x, y, width, height, metrics, lang=DEFAULT_LANG):
     """Right footer card: start/end altitude, rendered at 2x without metric mutation."""
     from io import BytesIO
     import cairosvg
 
+    labels = _load_i18n(lang)
     scale = 2
     w, h = round(width), round(height)
     layer = Image.new("RGBA", (w * scale, h * scale), (0, 0, 0, 0))
@@ -918,7 +948,7 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
     icon = Image.open(BytesIO(cairosvg.svg2png(bytestring=icon_svg.encode("utf-8"),
                      output_width=px(26), output_height=px(26)))).convert("RGBA")
     layer.alpha_composite(icon, (px(19), px(15)))
-    heading = "Altitud" if lang.startswith("es") else "Altitude"
+    heading = labels["altitude"]
     draw.text((px(58), px(18)), heading, font=f(19, True), fill="#FFFFFF")
 
     # Two balanced columns: prominent altitude above its descriptive label.
@@ -927,13 +957,17 @@ def draw_altitude_card(d, x, y, width, height, metrics, lang="es"):
     draw.line((px(mid), px(76), px(mid), px(h - 24)),
               fill=(255, 255, 255, 36), width=scale)
     columns = [
-        ("Altura inicio" if lang.startswith("es") else "Start altitude",
+        (labels["start_altitude"],
          metrics.get("elevation_start_m"), "#D2DFD0", "#5DADE2", w / 4),
-        ("Altura fin" if lang.startswith("es") else "End altitude",
+        (labels["end_altitude"],
          metrics.get("elevation_end_m"), "#F5B041", "#F5B041", 3 * w / 4),
     ]
     for label, value, dot_color, value_color, cx in columns:
-        value_text = "N/D" if value is None else f"{int(round(value)):,} m"
+        value_text = (
+            labels["not_available"]
+            if value is None
+            else f"{int(round(value)):,} {labels['unit_m']}"
+        )
         value_size = 29
         label_size = 14
         max_text_width = w / 2 - 42
@@ -975,7 +1009,7 @@ def _draw_scaled_card(img, painter, x, y, width, height, native_height, *args):
 
 
 def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
-                                chart_path=None, lang="es"):
+                                chart_path=None):
     """Render the elevation profile and its three anchored callouts in Pillow.
 
     The input series and ascent/descent metrics are used unchanged. When the
@@ -999,7 +1033,11 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
                font=font(20, True), fill=accent, anchor="mm")
 
     def fmt_signed(value, prefix):
-        return prefix + (_fmt_m(value) if value is not None else "N/D")
+        return prefix + (
+            _fmt_m(value, labels)
+            if value is not None
+            else labels["not_available"]
+        )
 
     pill(w - 352, 13, "↑ " + fmt_signed(metrics.get("elevation_gain_m"), "+"),
          "#A3E635", "#1D3824", "#567C3C")
@@ -1054,13 +1092,15 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
             xx = left + (right-left)*i/4
             d.text((xx, bottom + 7), f"{xmin+(xmax-xmin)*i/4:.1f}",
                    font=font(18, True), fill="#DDE8D2", anchor="mt")
-        axis_name = "DISTANCIA (km)" if lang.startswith("es") else "DISTANCE (km)"
+        axis_name = labels["distance_axis"]
         d.text((w/2, h-15), axis_name, font=font(15, True),
                fill="#DDE8D2", anchor="mm")
 
         def callout(point, value, kind):
             cx, cy = point
-            label = ("▲ " if kind == "peak" else "") + f"{round(value):,} m"
+            label = ("▲ " if kind == "peak" else "") + (
+                f"{round(value):,} {labels['unit_m']}"
+            )
             fnt = font(18, True)
             tw = d.textbbox((0,0), label, font=fnt)[2]
             bw, bh = tw + 25, 35
@@ -1097,8 +1137,7 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
             d.line((left - 7, tick_y, left, tick_y), fill=axis_color, width=2)
             d.text((left - 13, tick_y), f"{altitude:,.0f}",
                    font=font(18, True), fill=axis_color, anchor="rm")
-        d.text((left - 8, top - 24), "ALTITUD (m)" if lang.startswith("es")
-               else "ELEVATION (m)", font=font(15, True),
+        d.text((left - 8, top - 24), labels["elevation_axis"], font=font(15, True),
                fill=axis_color, anchor="rm")
 
     # Border last: remains crisp over gradient, grid, and profile.
@@ -1107,7 +1146,7 @@ def draw_elevation_profile_card(img, x, y, width, height, metrics, labels,
     img.paste(layer, (round(x), round(y)), layer)
 
 
-def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
+def render_outdoor_story(metadata, metrics, chart_path, output_path, lang=DEFAULT_LANG):
     labels = _load_i18n(lang)
     img = Image.new("RGB", (W, H), BG)
     y_cursor = TOP_MARGIN
@@ -1116,7 +1155,7 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
     scenic_header(img, ROW_HEIGHTS[0])
     d = ImageDraw.Draw(img)
     _tiny_icon(d, M, y_cursor + 8, "mountain", GREEN, 1.15)
-    txt(d, M + 51, y_cursor + 9, "GPX  /  INSIGHT", 21, GREEN, True)
+    txt(d, M + 51, y_cursor + 9, labels["app_brand"], 21, GREEN, True)
     date = _route_date_label(metadata, lang)
     txt(d, M, y_cursor + 62, date.upper(), 19, MUTED, True)
     name = metadata.get("name") or _t(labels, "unnamed_route")
@@ -1136,10 +1175,10 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
         gradient_card(img, (x, y_cursor, x + kpi_w, y_cursor + ROW_HEIGHTS[1]), top, bottom, 18)
     d = ImageDraw.Draw(img)
     values = [
-        (_t(labels, "total_distance"), _fmt_km(metrics["distance_km"]), TEXT, "distance"),
-        (_t(labels, "ascent"), "+" + _fmt_m(metrics["elevation_gain_m"]), GREEN, "up"),
-        (_t(labels, "descent"), "-" + _fmt_m(metrics["elevation_loss_m"]), ORANGE, "down"),
-        (_t(labels, "total_time"), _fmt_time(metrics["total_time"]), TEXT, "clock"),
+        (_t(labels, "total_distance"), _fmt_km(metrics["distance_km"], labels), TEXT, "distance"),
+        (_t(labels, "ascent"), "+" + _fmt_m(metrics["elevation_gain_m"], labels), GREEN, "up"),
+        (_t(labels, "descent"), "-" + _fmt_m(metrics["elevation_loss_m"], labels), ORANGE, "down"),
+        (_t(labels, "total_time"), _fmt_time(metrics["total_time"], labels), TEXT, "clock"),
     ]
     col = kpi_w + 6
     for i, (lab, val, color, ico) in enumerate(values):
@@ -1151,26 +1190,28 @@ def render_outdoor_story(metadata, metrics, chart_path, output_path, lang="es"):
 
     # Start/end row.
     d = ImageDraw.Draw(img)
-    txt(d, M + 12, y_cursor + 4, f"{_t(labels,'start')}: {_fmt_time(metrics['start_time'])}", 25, TEXT, True)
-    txt(d, W - M - 12, y_cursor + 4, f"{_t(labels,'end')}: {_fmt_time(metrics['end_time'])}", 25, TEXT, True, anchor="ra")
+    txt(d, M + 12, y_cursor + 4, f"{_t(labels, 'start')}: {_fmt_time(metrics['start_time'], labels)}", 25, TEXT, True)
+    txt(d, W - M - 12, y_cursor + 4, f"{_t(labels, 'end')}: {_fmt_time(metrics['end_time'], labels)}", 25, TEXT, True, anchor="ra")
     y_cursor += ROW_HEIGHTS[2] + GAP
 
     # Elevation profile is drawn from the existing metric series, without
     # recalculating elevation, distance, or any route statistics.
     draw_elevation_profile_card(img, M, y_cursor, INNER, ROW_HEIGHTS[3],
-                                metrics, labels, chart_path, lang)
+                                metrics, labels, chart_path)
     y_cursor += ROW_HEIGHTS[3] + GAP
 
     # Two columns. Existing card painters are unchanged.
     half = (INNER - GAP) // 2
     time_data = [
-        (_t(labels, "moving_time"), _fmt_time(metrics["moving_time"]), lang),
-        (_t(labels, "stopped"), _fmt_time(metrics["stopped_time"]), lang),
-        (_t(labels, "avg_speed_total"), _fmt_speed(metrics["avg_speed_total"]), lang),
-        (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"]), lang),
+        (_t(labels, "moving"), _fmt_time(metrics["moving_time"], labels)),
+        (_t(labels, "stopped"), _fmt_time(metrics["stopped_time"], labels)),
+        (_t(labels, "avg_speed"), _fmt_speed(metrics["avg_speed_total"], labels)),
+        (_t(labels, "max_speed"), _fmt_speed(metrics["max_speed"], labels)),
     ]
     # Draw at native 230 px height: never resize the card anisotropically.
-    draw_times_card(ImageDraw.Draw(img), M, y_cursor, half, ROW_HEIGHTS[4], time_data)
+    draw_times_card(
+        ImageDraw.Draw(img), M, y_cursor, half, ROW_HEIGHTS[4], time_data, lang=lang
+    )
     rx = M + half + GAP
     _draw_scaled_card(img, draw_slope_ratios_card, rx, y_cursor, half, ROW_HEIGHTS[4], 278, metrics, labels)
     y_cursor += ROW_HEIGHTS[4] + GAP

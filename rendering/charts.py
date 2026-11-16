@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
 
+from i18n import DEFAULT_LANG, TRANSLATIONS
+
 
 THEME_COLORS = {
     "forest": {
@@ -45,11 +47,12 @@ def _adaptive_savgol(values):
 def generate_elevation_chart(
     points,
     theme="forest",
-    lang="en",
+    lang=DEFAULT_LANG,
     output_path="output/elevation_profile.png",
 ):
     palette = THEME_COLORS.get(theme, THEME_COLORS["forest"])
-    is_es = (lang or "").lower().startswith("es")
+    language = "es" if (lang or "").lower().startswith("es") else "en"
+    labels = TRANSLATIONS[language]
 
     distances = np.asarray(
         points.get("distance_series_km") or [],
@@ -96,8 +99,18 @@ def generate_elevation_chart(
         ax.set_xlim(0, max(total_km, 0.1))
         ax.set_ylim(y_floor, y_top)
         ax.set_xticks(x_ticks)
-        ax.set_xlabel("Distancia (km)" if is_es else "Distance (km)", color=palette["text"], fontsize=11, labelpad=10)
-        ax.set_ylabel("Elevación (m)" if is_es else "Elevation (m)", color=palette["text"], fontsize=11, labelpad=10)
+        ax.set_xlabel(
+            labels["distance_axis"],
+            color=palette["text"],
+            fontsize=11,
+            labelpad=10,
+        )
+        ax.set_ylabel(
+            labels["elevation_axis"],
+            color=palette["text"],
+            fontsize=11,
+            labelpad=14,
+        )
         ax.tick_params(axis="x", colors=palette["text"], labelsize=11)
         ax.tick_params(axis="y", colors=palette["text"], labelsize=10)
         ax.grid(True, axis="y", color=palette["grid"], alpha=0.5, linewidth=0.8)

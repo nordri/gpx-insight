@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from i18n import DEFAULT_LANG
 from service import generate_story
 
 
@@ -10,7 +11,7 @@ def main():
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", default="output/story.png")
     parser.add_argument("--theme", default="forest")
-    parser.add_argument("--lang", default="en")
+    parser.add_argument("--lang", default=DEFAULT_LANG)
 
     args = parser.parse_args()
 
