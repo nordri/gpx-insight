@@ -77,6 +77,8 @@ make analyze GPX=route.gpx OUTPUT=output/my-route.png THEME=forest LANG=es
 | `make floci-ecr-destroy` | Removes all FloCI resources managed by the shared Terraform state. | `make floci-ecr-destroy` |
 | `make floci-lambda-apply` | Deploys the Lambda function from the already-published ECR image. | `make floci-lambda-apply` |
 | `make floci-lambda-invoke` | Invokes Lambda and saves the returned PNG. | `make floci-lambda-invoke` |
+| `make floci-api-apply` / `make floci-api-test` | Deploys HTTP API Gateway and tests CORS, binary PNG, and HTTP errors. | `make floci-api-apply && make floci-api-test` |
+| `make floci-frontend` | Serves the local static frontend at `http://127.0.0.1:8080`. | `make floci-frontend` |
 | `make floci-deploy` | Runs tests, builds and pushes the image, applies Lambda/API Terraform, and verifies the HTTP PNG. | `make floci-deploy` |
 | `make clean` | Removes generated output files. | `make clean` |
 
@@ -144,9 +146,25 @@ curl --silent --show-error \
 
 The optional query parameters are `theme=forest|volcanic|alpine` and `lang=en|es`. Successful responses are HTTP 200 with `Content-Type: image/png`; the API integration decodes the Lambda's Base64 proxy response and returns raw PNG bytes (1080 × 1920). Handler errors remain JSON: invalid GPX is 422, unsupported content type is 415, invalid theme/language is 400, and an empty body is a 400. FloCI's empty-body event omits `body`, so the handler reports `INVALID_REQUEST` rather than `EMPTY_BODY`. Because the API declares only the POST route and has no `$default` catch-all, GET and unknown paths are rejected by FloCI before Lambda; both were observed as HTTP 404 JSON. The local test script verifies these behaviors and the binary response.
 
-The API uses no CORS, custom domain, API key, request-body logging, or extra routes. Lambda invocation permission is scoped to the API's POST route. To clean up all resources in the shared Terraform state (API, Lambda, IAM, log group, and ECR), run `make floci-ecr-destroy`, then optionally `make floci-stop`.
+The API allows CORS only from `http://127.0.0.1:8080`, for `POST` and the `Content-Type` request header. HTTP API Gateway handles the corresponding OPTIONS preflight from this configuration; `make floci-api-test` verifies its response. There is no custom domain, API key, request-body logging, or extra route. Lambda invocation permission is scoped to the API's POST route. To clean up all resources in the shared Terraform state (API, Lambda, IAM, log group, and ECR), run `make floci-ecr-destroy`, then optionally `make floci-stop`.
 
 FloCI's HTTP API binary path and local `/_aws/execute-api/` listener are emulator-specific; AWS real deployments use the provider-reported `https://<api-id>.execute-api.<region>.amazonaws.com/v1/generate` URL. The OCI registry is exposed over local HTTP, so the existing path-style adapters are only used by the local ECR push and Lambda image pull; AWS-real ECR image URIs remain unchanged when `floci_endpoint` is empty. FloCI is not a substitute for validating API Gateway, IAM, ECR, or registry behavior in AWS. The Lambda deployment, invocation, and API scripts are restricted to loopback endpoints and dummy credentials.
+
+### Local web frontend
+
+The static frontend uses only HTML, CSS, and browser JavaScript. It sends the selected GPX file bytes directly to the FloCI HTTP API and does not store the file. Start FloCI and deploy the API first as described above; `make floci-frontend` does not start FloCI, build or deploy the backend, or modify Terraform resources.
+
+```bash
+make floci-start
+# If the API has not yet been deployed, complete the FloCI deployment steps above.
+make floci-frontend
+```
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080), select a `.gpx` file no larger than 5 MiB, choose the Forest or Alpine theme and Español or English, then generate and download the PNG. The result remains on the page, and “Generar otra” / “Create another” lets you process another route without reloading. The local server binds only to loopback and serves a temporary copy of `frontend/`; it reads `api_id` and `api_invoke_url` from the existing Terraform outputs to generate a temporary runtime configuration. No API ID or generated configuration is committed.
+
+For static hosting outside the local FloCI server, set `apiUrl` in `frontend/config.js` to the complete API invocation URL ending in `/v1/generate` (for example, get the current URL with `terraform -chdir=infrastructure/terraform output -raw api_invoke_url`). Do not copy a local FloCI `/_aws/execute-api/` URL to AWS hosting. The configured API must allow the hosting origin through CORS; Terraform currently permits only the local development origin, so update that exact origin when a future static hosting origin is selected. This frontend is static-hosting-ready, but S3 and CloudFront resources are not part of this iteration.
+
+In the current workspace, FloCI does not expose an active API matching its Terraform `api_id`; invocation and OPTIONS preflight both returned “Invalid API id”. Native API Gateway CORS configuration is present and `make floci-api-test` now verifies the preflight when the API is deployed, but the browser-to-FloCI flow could not be confirmed until FloCI's API is available.
 
 For an already-running FloCI instance with Terraform initialized and the ECR repository created, run the complete pipeline with:
 

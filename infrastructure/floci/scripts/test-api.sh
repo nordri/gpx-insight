@@ -69,6 +69,40 @@ TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 
 echo "Testing local API URL: $API_URL"
+cors_status="$(
+  curl --silent --show-error --max-time 10 \
+    --dump-header "$TEMP_DIR/cors.headers" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --request OPTIONS \
+    --header 'Origin: http://127.0.0.1:8080' \
+    --header 'Access-Control-Request-Method: POST' \
+    --header 'Access-Control-Request-Headers: content-type' \
+    "$API_URL"
+)"
+python3 - "$TEMP_DIR/cors.headers" "$cors_status" <<'PY'
+import pathlib
+import sys
+
+headers_path, status = sys.argv[1:]
+if not 200 <= int(status) < 300:
+    raise SystemExit(f"CORS preflight returned HTTP {status}, expected a 2xx response")
+headers = {}
+for line in pathlib.Path(headers_path).read_text(encoding="iso-8859-1").splitlines():
+    if ":" in line:
+        name, value = line.split(":", 1)
+        headers[name.strip().lower()] = value.strip()
+if headers.get("access-control-allow-origin") != "http://127.0.0.1:8080":
+    raise SystemExit("CORS preflight did not allow origin http://127.0.0.1:8080")
+allowed_methods = {value.strip().upper() for value in headers.get("access-control-allow-methods", "").split(",")}
+if "POST" not in allowed_methods:
+    raise SystemExit("CORS preflight did not allow POST")
+allowed_headers = {value.strip().lower() for value in headers.get("access-control-allow-headers", "").split(",")}
+if "content-type" not in allowed_headers:
+    raise SystemExit("CORS preflight did not allow Content-Type")
+print("CORS preflight: allowed origin, POST, and Content-Type")
+PY
+
 metadata="$(
   curl --silent --show-error --max-time 60 \
     --output "$TEMP_DIR/success.png" \

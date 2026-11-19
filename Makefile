@@ -6,10 +6,10 @@ LANG ?= es
 DOCKER_IMAGE ?= gpx-insight:latest
 ECR_IMAGE_TAG ?= 1.1.0
 
-.PHONY: help setup check test analyze clean docker-build floci-start floci-stop floci-test floci-ecr-init floci-ecr-apply floci-ecr-push floci-ecr-destroy floci-lambda-apply floci-lambda-invoke floci-api-apply floci-api-test floci-deploy
+.PHONY: help setup check test analyze clean docker-build floci-start floci-stop floci-test floci-ecr-init floci-ecr-apply floci-ecr-push floci-ecr-destroy floci-lambda-apply floci-lambda-invoke floci-api-apply floci-api-test floci-deploy floci-frontend
 
 help:
-	@printf '%s\n' 'make setup                  Create venv and install dependencies' 'make check                  Verify runtime dependencies' 'make test                   Run unittest suite' 'make analyze GPX=path.gpx   Generate infographic (OUTPUT=... THEME=... LANG=...)' 'make docker-build           Build Lambda image (DOCKER_IMAGE=...)' 'make floci-start            Start the local FloCI emulator' 'make floci-test             Run the FloCI smoke test' 'make floci-ecr-init         Initialize local ECR Terraform' 'make floci-ecr-apply        Create the local ECR repository' 'make floci-ecr-push         Build and publish the image (ECR_IMAGE_TAG=...)' 'make floci-ecr-destroy      Remove all local FloCI Terraform resources' 'make floci-lambda-apply     Deploy Lambda from the existing ECR image' 'make floci-lambda-invoke    Invoke Lambda directly' 'make floci-api-apply        Deploy HTTP API Gateway' 'make floci-api-test         Test binary PNG and HTTP errors' 'make floci-deploy           Test, build, push, apply Lambda/API, and verify PNG' 'make clean                  Remove generated output files'
+	@printf '%s\n' 'make setup                  Create venv and install dependencies' 'make check                  Verify runtime dependencies' 'make test                   Run unittest suite' 'make analyze GPX=path.gpx   Generate infographic (OUTPUT=... THEME=... LANG=...)' 'make docker-build           Build Lambda image (DOCKER_IMAGE=...)' 'make floci-start            Start the local FloCI emulator' 'make floci-test             Run the FloCI smoke test' 'make floci-ecr-init         Initialize local ECR Terraform' 'make floci-ecr-apply        Create the local ECR repository' 'make floci-ecr-push         Build and publish the image (ECR_IMAGE_TAG=...)' 'make floci-ecr-destroy      Remove all local FloCI Terraform resources' 'make floci-lambda-apply     Deploy Lambda from the existing ECR image' 'make floci-lambda-invoke    Invoke Lambda directly' 'make floci-api-apply        Deploy HTTP API Gateway' 'make floci-api-test         Test binary PNG, HTTP errors, and CORS' 'make floci-frontend         Serve the static frontend at http://127.0.0.1:8080' 'make floci-deploy           Test, build, push, apply Lambda/API, and verify PNG' 'make clean                  Remove generated output files'
 
 setup:
 	@bash scripts/setup.sh
@@ -64,3 +64,6 @@ floci-api-test:
 
 floci-deploy:
 	./infrastructure/floci/scripts/deploy.sh
+
+floci-frontend:
+	./infrastructure/floci/scripts/serve-frontend.sh

@@ -1,6 +1,12 @@
 resource "aws_apigatewayv2_api" "gpx_insight" {
   name          = "gpx-insight"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["http://127.0.0.1:8080"]
+    allow_methods = ["POST"]
+    allow_headers = ["content-type"]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "gpx_insight" {
