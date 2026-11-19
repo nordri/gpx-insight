@@ -77,6 +77,7 @@ make analyze GPX=route.gpx OUTPUT=output/my-route.png THEME=forest LANG=es
 | `make floci-ecr-destroy` | Removes all FloCI resources managed by the shared Terraform state. | `make floci-ecr-destroy` |
 | `make floci-lambda-apply` | Deploys the Lambda function from the already-published ECR image. | `make floci-lambda-apply` |
 | `make floci-lambda-invoke` | Invokes Lambda and saves the returned PNG. | `make floci-lambda-invoke` |
+| `make floci-deploy` | Runs tests, builds and pushes the image, applies Lambda/API Terraform, and verifies the HTTP PNG. | `make floci-deploy` |
 | `make clean` | Removes generated output files. | `make clean` |
 
 ### Docker image for AWS Lambda
@@ -146,6 +147,14 @@ The optional query parameters are `theme=forest|volcanic|alpine` and `lang=en|es
 The API uses no CORS, custom domain, API key, request-body logging, or extra routes. Lambda invocation permission is scoped to the API's POST route. To clean up all resources in the shared Terraform state (API, Lambda, IAM, log group, and ECR), run `make floci-ecr-destroy`, then optionally `make floci-stop`.
 
 FloCI's HTTP API binary path and local `/_aws/execute-api/` listener are emulator-specific; AWS real deployments use the provider-reported `https://<api-id>.execute-api.<region>.amazonaws.com/v1/generate` URL. The OCI registry is exposed over local HTTP, so the existing path-style adapters are only used by the local ECR push and Lambda image pull; AWS-real ECR image URIs remain unchanged when `floci_endpoint` is empty. FloCI is not a substitute for validating API Gateway, IAM, ECR, or registry behavior in AWS. The Lambda deployment, invocation, and API scripts are restricted to loopback endpoints and dummy credentials.
+
+For an already-running FloCI instance with Terraform initialized and the ECR repository created, run the complete pipeline with:
+
+```bash
+make floci-deploy
+```
+
+It runs `make test`, then `make floci-ecr-push` (which builds the Docker image before publishing it), `make floci-api-apply` (full Terraform apply, including the updated Lambda), and `make floci-api-test` (HTTP-to-PNG and error checks). Each step must succeed before the next starts. This target does not start FloCI or create the initial ECR repository.
 
 ### Reusable Python API
 
